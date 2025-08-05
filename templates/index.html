@@ -1,1211 +1,160 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FB Comment Automation</title>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            color: #333;
-            line-height: 1.6;
-        }
-
-        .container {
-            max-width: 100%;
-            margin: 0 auto;
-            padding: 10px;
-        }
-
-        .header {
-            background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(10px);
-            padding: 15px;
-            border-radius: 15px;
-            margin-bottom: 20px;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-        }
-
-        .header h1 {
-            font-size: 1.8rem;
-            color: #2c3e50;
-            text-align: center;
-            margin-bottom: 10px;
-        }
-
-        .status-bar {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            flex-wrap: wrap;
-            gap: 10px;
-        }
-
-        .status-badge {
-            padding: 8px 16px;
-            border-radius: 25px;
-            font-size: 0.85rem;
-            font-weight: 600;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .status-running {
-            background: linear-gradient(45deg, #4CAF50, #45a049);
-            color: white;
-            animation: pulse 2s infinite;
-        }
-
-        .status-stopped {
-            background: linear-gradient(45deg, #f44336, #d32f2f);
-            color: white;
-        }
-
-        .status-idle {
-            background: linear-gradient(45deg, #ff9800, #f57c00);
-            color: white;
-        }
-
-        @keyframes pulse {
-            0% { transform: scale(1); }
-            50% { transform: scale(1.05); }
-            100% { transform: scale(1); }
-        }
-
-        .card {
-            background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(10px);
-            border-radius: 20px;
-            padding: 20px;
-            margin-bottom: 20px;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-        }
-
-        .card-header {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            margin-bottom: 20px;
-            padding-bottom: 15px;
-            border-bottom: 2px solid #f0f0f0;
-        }
-
-        .card-header i {
-            font-size: 1.5rem;
-            color: #667eea;
-        }
-
-        .card-header h2 {
-            font-size: 1.3rem;
-            color: #2c3e50;
-        }
-
-        .form-group {
-            margin-bottom: 20px;
-        }
-
-        .form-label {
-            display: block;
-            margin-bottom: 8px;
-            font-weight: 600;
-            color: #2c3e50;
-            font-size: 0.95rem;
-        }
-
-        .form-input, .form-textarea, .form-select {
-            width: 100%;
-            padding: 15px;
-            border: 2px solid #e1e8ed;
-            border-radius: 12px;
-            font-size: 1rem;
-            transition: all 0.3s ease;
-            background: white;
-        }
-
-        .form-input:focus, .form-textarea:focus, .form-select:focus {
-            outline: none;
-            border-color: #667eea;
-            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-        }
-
-        .form-textarea {
-            min-height: 120px;
-            resize: vertical;
-        }
-
-        .file-upload {
-            position: relative;
-            display: inline-block;
-            width: 100%;
-        }
-
-        .file-upload input[type=file] {
-            position: absolute;
-            opacity: 0;
-            width: 100%;
-            height: 100%;
-            cursor: pointer;
-        }
-
-        .file-upload-label {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 10px;
-            padding: 20px;
-            border: 2px dashed #667eea;
-            border-radius: 12px;
-            background: #f8f9ff;
-            color: #667eea;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
-        }
-
-        .file-upload-label:hover {
-            background: #667eea;
-            color: white;
-        }
-
-        .btn {
-            padding: 15px 25px;
-            border: none;
-            border-radius: 12px;
-            font-size: 1rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 10px;
-            text-decoration: none;
-            width: 100%;
-            margin-bottom: 10px;
-        }
-
-        .btn-primary {
-            background: linear-gradient(45deg, #667eea, #764ba2);
-            color: white;
-        }
-
-        .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.3);
-        }
-
-        .btn-danger {
-            background: linear-gradient(45deg, #f44336, #d32f2f);
-            color: white;
-        }
-
-        .btn-danger:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 25px rgba(244, 67, 54, 0.3);
-        }
-
-        .btn-secondary {
-            background: linear-gradient(45deg, #6c757d, #5a6268);
-            color: white;
-        }
-
-        .btn:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-            transform: none;
-        }
-
-        .progress-container {
-            background: #f0f0f0;
-            border-radius: 10px;
-            padding: 3px;
-            margin: 15px 0;
-        }
-
-        .progress-bar {
-            height: 8px;
-            background: linear-gradient(45deg, #4CAF50, #45a049);
-            border-radius: 8px;
-            transition: width 0.3s ease;
-            width: 0%;
-        }
-
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-            gap: 15px;
-            margin-top: 20px;
-        }
-
-        .stat-item {
-            text-align: center;
-            padding: 15px;
-            background: linear-gradient(45deg, #f8f9ff, #e3f2fd);
-            border-radius: 12px;
-            border: 1px solid #e1e8ed;
-        }
-
-        .stat-value {
-            font-size: 1.5rem;
-            font-weight: bold;
-            color: #667eea;
-            display: block;
-        }
-
-        .stat-label {
-            font-size: 0.8rem;
-            color: #666;
-            margin-top: 5px;
-        }
-
-        .logs-container {
-            max-height: 300px;
-            overflow-y: auto;
-            background: #1e1e1e;
-            border-radius: 12px;
-            padding: 15px;
-            font-family: 'Courier New', monospace;
-            font-size: 0.85rem;
-        }
-
-        .log-entry {
-            padding: 5px 0;
-            border-bottom: 1px solid #333;
-        }
-
-        .log-entry:last-child {
-            border-bottom: none;
-        }
-
-        .log-timestamp {
-            color: #888;
-        }
-
-        .log-info {
-            color: #4CAF50;
-        }
-
-        .log-warning {
-            color: #ff9800;
-        }
-
-        .log-error {
-            color: #f44336;
-        }
-
-        .task-card {
-            background: #f8f9ff;
-            border: 1px solid #e1e8ed;
-            border-radius: 12px;
-            padding: 15px;
-            margin-bottom: 15px;
-        }
-
-        .task-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 10px;
-        }
-
-        .task-id {
-            font-family: monospace;
-            background: #667eea;
-            color: white;
-            padding: 4px 8px;
-            border-radius: 6px;
-            font-size: 0.8rem;
-        }
-
-        .floating-action {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            z-index: 1000;
-        }
-
-        .fab {
-            width: 60px;
-            height: 60px;
-            border-radius: 50%;
-            background: linear-gradient(45deg, #667eea, #764ba2);
-            color: white;
-            border: none;
-            font-size: 1.5rem;
-            cursor: pointer;
-            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.3);
-            transition: all 0.3s ease;
-        }
-
-        .fab:hover {
-            transform: scale(1.1);
-        }
-
-        .tabs {
-            display: flex;
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 12px;
-            padding: 5px;
-            margin-bottom: 20px;
-        }
-
-        .tab {
-            flex: 1;
-            padding: 12px;
-            text-align: center;
-            border-radius: 8px;
-            cursor: pointer;
-            font-weight: 600;
-            transition: all 0.3s ease;
-            color: white;
-        }
-
-        .tab.active {
-            background: rgba(255, 255, 255, 0.9);
-            color: #2c3e50;
-        }
-
-        .tab-content {
-            display: none;
-        }
-
-        .tab-content.active {
-            display: block;
-        }
-
-        .alert {
-            padding: 15px;
-            border-radius: 12px;
-            margin-bottom: 20px;
-            font-weight: 600;
-        }
-
-        .alert-success {
-            background: linear-gradient(45deg, #d4edda, #c3e6cb);
-            color: #155724;
-            border: 1px solid #c3e6cb;
-        }
-
-        .alert-error {
-            background: linear-gradient(45deg, #f8d7da, #f5c6cb);
-            color: #721c24;
-            border: 1px solid #f5c6cb;
-        }
-
-        .hidden {
-            display: none !important;
-        }
-
-        /* Responsive Design */
-        @media (min-width: 768px) {
-            .container {
-                max-width: 768px;
-                padding: 20px;
-            }
-
-            .header h1 {
-                font-size: 2.2rem;
-            }
-
-            .stats-grid {
-                grid-template-columns: repeat(4, 1fr);
-            }
-
-            .btn {
-                width: auto;
-                display: inline-flex;
-                margin-right: 10px;
-            }
-        }
-
-        @media (min-width: 1024px) {
-            .container {
-                max-width: 1024px;
-            }
-        }
-    </style>
+  <meta charset="UTF-8">
+  <title>Facebook Comment Automation</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- Bootstrap 5 CDN -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
 </head>
-<body>
-    <div class="container">
-        <!-- Header -->
-        <div class="header">
-            <h1><i class="fab fa-facebook"></i> Comment Automation</h1>
-            <div class="status-bar">
-                <div id="statusBadge" class="status-badge status-idle">
-                    <i class="fas fa-circle"></i>
-                    <span>Idle</span>
-                </div>
-                <div id="taskId" class="task-id hidden"></div>
-            </div>
+<body class="bg-light">
+
+<div class="container my-4">
+  <h2 class="text-center mb-4">Facebook Comment Automation</h2>
+
+  <!-- Upload Section -->
+  <div class="card mb-3">
+    <div class="card-body">
+      <h5>1. Upload Files</h5>
+      <form id="uploadForm" enctype="multipart/form-data">
+        <div class="mb-2">
+          <label for="tokens" class="form-label">Tokens File</label>
+          <input type="file" class="form-control" id="tokens" name="tokens" required>
         </div>
-
-        <!-- Navigation Tabs -->
-        <div class="tabs">
-            <div class="tab active" onclick="switchTab('setup')">
-                <i class="fas fa-cog"></i> Setup
-            </div>
-            <div class="tab" onclick="switchTab('monitor')">
-                <i class="fas fa-chart-line"></i> Monitor
-            </div>
-            <div class="tab" onclick="switchTab('tasks')">
-                <i class="fas fa-tasks"></i> Tasks
-            </div>
+        <div class="mb-3">
+          <label for="comments" class="form-label">Comments File</label>
+          <input type="file" class="form-control" id="comments" name="comments" required>
         </div>
-
-        <!-- Setup Tab -->
-        <div id="setupTab" class="tab-content active">
-            <!-- File Upload Card -->
-            <div class="card">
-                <div class="card-header">
-                    <i class="fas fa-upload"></i>
-                    <h2>Upload Files</h2>
-                </div>
-                
-                <div class="form-group">
-                    <label class="form-label">Facebook Tokens File</label>
-                    <div class="file-upload">
-                        <input type="file" id="tokensFile" accept=".txt">
-                        <label for="tokensFile" class="file-upload-label">
-                            <i class="fas fa-key"></i>
-                            Choose Tokens File
-                        </label>
-                    </div>
-                </div>
-
-                <div class="form-group">
-                    <label class="form-label">Comments File</label>
-                    <div class="file-upload">
-                        <input type="file" id="commentsFile" accept=".txt">
-                        <label for="commentsFile" class="file-upload-label">
-                            <i class="fas fa-comments"></i>
-                            Choose Comments File
-                        </label>
-                    </div>
-                </div>
-
-                <button class="btn btn-secondary" onclick="uploadFiles()">
-                    <i class="fas fa-cloud-upload-alt"></i>
-                    Upload Files
-                </button>
-            </div>
-
-            <!-- Manual Input Card -->
-            <div class="card">
-                <div class="card-header">
-                    <i class="fas fa-edit"></i>
-                    <h2>Manual Input</h2>
-                </div>
-
-                <div class="form-group">
-                    <label class="form-label">Facebook Tokens (one per line)</label>
-                    <textarea id="tokensInput" class="form-textarea" placeholder="Enter your Facebook access tokens, one per line..."></textarea>
-                </div>
-
-                <div class="form-group">
-                    <label class="form-label">Comments (one per line)</label>
-                    <textarea id="commentsInput" class="form-textarea" placeholder="Enter your comments, one per line..."></textarea>
-                </div>
-            </div>
-
-            <!-- Configuration Card -->
-            <div class="card">
-                <div class="card-header">
-                    <i class="fas fa-sliders-h"></i>
-                    <h2>Configuration</h2>
-                </div>
-
-                <div class="form-group">
-                    <label class="form-label">Post IDs (comma separated)</label>
-                    <input type="text" id="postIds" class="form-input" placeholder="123456789, 987654321">
-                </div>
-
-                <div class="form-group">
-                    <label class="form-label">Delay Between Comments (seconds)</label>
-                    <input type="number" id="delay" class="form-input" value="60" min="60">
-                </div>
-
-                <div class="form-group">
-                    <label class="form-label">Mention User ID (optional)</label>
-                    <input type="text" id="mentionId" class="form-input" placeholder="100001234567890">
-                </div>
-
-                <div class="form-group">
-                    <label class="form-label">Mention User Name (optional)</label>
-                    <input type="text" id="mentionName" class="form-input" placeholder="John Doe">
-                </div>
-
-                <button class="btn btn-primary" onclick="startAutomation()" id="startBtn">
-                    <i class="fas fa-play"></i>
-                    Start Automation
-                </button>
-
-                <button class="btn btn-danger hidden" onclick="stopAutomation()" id="stopBtn">
-                    <i class="fas fa-stop"></i>
-                    Stop Automation
-                </button>
-            </div>
-        </div>
-
-        <!-- Monitor Tab -->
-        <div id="monitorTab" class="tab-content">
-            <!-- Progress Card -->
-            <div class="card">
-                <div class="card-header">
-                    <i class="fas fa-chart-line"></i>
-                    <h2>Progress</h2>
-                </div>
-
-                <div class="stats-grid">
-                    <div class="stat-item">
-                        <span class="stat-value" id="currentComment">0</span>
-                        <span class="stat-label">Comments Posted</span>
-                    </div>
-                    <div class="stat-item">
-                        <span class="stat-value" id="currentToken">-</span>
-                        <span class="stat-label">Current Token</span>
-                    </div>
-                    <div class="stat-item">
-                        <span class="stat-value" id="currentPost">-</span>
-                        <span class="stat-label">Current Post</span>
-                    </div>
-                    <div class="stat-item">
-                        <span class="stat-value" id="uptime">00:00:00</span>
-                        <span class="stat-label">Uptime</span>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Logs Card -->
-            <div class="card">
-                <div class="card-header">
-                    <i class="fas fa-terminal"></i>
-                    <h2>Live Logs</h2>
-                </div>
-                
-                <div class="logs-container" id="logsContainer">
-                    <div class="log-entry">
-                        <span class="log-timestamp">Ready to start automation...</span>
-                    </div>
-                </div>
-
-                <button class="btn btn-secondary" onclick="downloadLogs()">
-                    <i class="fas fa-download"></i>
-                    Download Logs
-                </button>
-            </div>
-        </div>
-
-        <!-- Tasks Tab -->
-        <div id="tasksTab" class="tab-content">
-            <div class="card">
-                <div class="card-header">
-                    <i class="fas fa-tasks"></i>
-                    <h2>Task Management</h2>
-                </div>
-
-                <div id="tasksContainer">
-                    <p style="text-align: center; color: #666; padding: 20px;">
-                        No tasks found. Start an automation to see tasks here.
-                    </p>
-                </div>
-
-                <button class="btn btn-secondary" onclick="clearCompletedTasks()">
-                    <i class="fas fa-trash"></i>
-                    Clear Completed Tasks
-                </button>
-            </div>
-        </div>
-
-        <!-- Alert Container -->
-        <div id="alertContainer"></div>
+        <button type="submit" class="btn btn-primary w-100">Upload</button>
+      </form>
     </div>
+  </div>
 
-    <!-- Floating Refresh Button -->
-    <div class="floating-action">
-        <button class="fab" onclick="refreshStatus()" title="Refresh Status">
-            <i class="fas fa-sync-alt"></i>
-        </button>
+  <!-- Automation Config -->
+  <div class="card mb-3">
+    <div class="card-body">
+      <h5>2. Configure Automation</h5>
+      <form id="automationForm">
+        <div class="mb-2">
+          <label for="post_ids" class="form-label">Post IDs (comma separated)</label>
+          <input type="text" class="form-control" id="post_ids" required>
+        </div>
+        <div class="mb-2">
+          <label for="delay" class="form-label">Minimum Delay (seconds)</label>
+          <input type="number" class="form-control" id="delay" value="60" min="60" required>
+        </div>
+        <div class="mb-2">
+          <label for="mention_id" class="form-label">Mention ID (optional)</label>
+          <input type="text" class="form-control" id="mention_id">
+        </div>
+        <div class="mb-3">
+          <label for="mention_name" class="form-label">Mention Name (optional)</label>
+          <input type="text" class="form-control" id="mention_name">
+        </div>
+        <button type="submit" class="btn btn-success w-100">Start Automation</button>
+      </form>
     </div>
+  </div>
 
-    <script>
-        let currentTaskId = null;
-        let startTime = null;
-        let updateInterval = null;
+  <!-- Stop Task -->
+  <div class="card mb-3">
+    <div class="card-body">
+      <h5>3. Stop Automation</h5>
+      <form id="stopForm">
+        <label for="task_id" class="form-label">Task ID</label>
+        <input type="text" class="form-control mb-2" id="task_id" placeholder="Enter Task ID to stop" required>
+        <button type="submit" class="btn btn-danger w-100">Stop Automation</button>
+      </form>
+    </div>
+  </div>
 
-        // Tab switching
-        function switchTab(tabName) {
-            // Hide all tab contents
-            document.querySelectorAll('.tab-content').forEach(content => {
-                content.classList.remove('active');
-            });
-            
-            // Remove active class from all tabs
-            document.querySelectorAll('.tab').forEach(tab => {
-                tab.classList.remove('active');
-            });
-            
-            // Show selected tab content and mark tab as active
-            document.getElementById(tabName + 'Tab').classList.add('active');
-            event.target.classList.add('active');
-        }
+  <!-- Status / Logs -->
+  <div class="card mb-4">
+    <div class="card-body">
+      <h5>4. Status & Logs</h5>
+      <button class="btn btn-outline-primary w-100 mb-2" id="refreshStatus">Refresh Status</button>
+      <pre id="statusBox" class="bg-dark text-white p-2 rounded" style="height: 200px; overflow-y: scroll;"></pre>
+      <a href="/download_logs" class="btn btn-outline-secondary w-100">Download Logs</a>
+    </div>
+  </div>
+</div>
 
-        // Show alert
-        function showAlert(message, type = 'success') {
-            const alertContainer = document.getElementById('alertContainer');
-            const alert = document.createElement('div');
-            alert.className = alert alert-${type};
-            alert.innerHTML = `
-                <i class="fas fa-${type === 'success' ? 'check-circle' : 'exclamation-triangle'}"></i>
-                ${message}
-            `;
-            
-            alertContainer.appendChild(alert);
-            
-            setTimeout(() => {
-                alert.remove();
-            }, 5000);
-        }
+<!-- Bootstrap JS + Axios -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
 
-        // Upload files
-        async function uploadFiles() {
-            const tokensFile = document.getElementById('tokensFile').files[0];
-            const commentsFile = document.getElementById('commentsFile').files[0];
-            
-            if (!tokensFile && !commentsFile) {
-                showAlert('Please select at least one file to upload.', 'error');
-                return;
-            }
-            
-            const formData = new FormData();
-            if (tokensFile) formData.append('tokens', tokensFile);
-            if (commentsFile) formData.append('comments', commentsFile);
-            
-            try {
-                const response = await fetch('/upload', {
-                    method: 'POST',
-                    body: formData
-                });
-                
-                const result = await response.json();
-                
-                if (result.success) {
-                    if (result.files.tokens) {
-                        document.getElementById('tokensInput').value = result.files.tokens.join('\n');
-                    }
-                    if (result.files.comments) {
-                        document.getElementById('commentsInput').value = result.files.comments.join('\n');
-                    }
-                    showAlert('Files uploaded successfully!');
-                } else {
-                    showAlert(result.error, 'error');
-                }
-            } catch (error) {
-                showAlert('Error uploading files: ' + error.message, 'error');
-            }
-        }
+<script>
+  let uploadedData = {};
 
-        // Start automation
-        async function startAutomation() {
-            const tokens = document.getElementById('tokensInput').value.split('\n').filter(t => t.trim());
-            const comments = document.getElementById('commentsInput').value.split('\n').filter(c => c.trim());
-            const postIds = document.getElementById('postIds').value;
-            const delay = document.getElementById('delay').value;
-            const mentionId = document.getElementById('mentionId').value;
-            const mentionName = document.getElementById('mentionName').value;
-            
-            if (!tokens.length || !comments.length || !postIds) {
-                showAlert('Please provide tokens, comments, and post IDs.', 'error');
-                return;
-            }
-            
-            const data = {
-                tokens,
-                comments,
-                post_ids: postIds,
-                delay: parseInt(delay),
-                mention_id: mentionId,
-                mention_name: mentionName
-            };
-            
-            try {
-                const response = await fetch('/start_automation', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(data)
-                });
-                
-                const result = await response.json();
-                
-                if (result.success) {
-                    currentTaskId = result.task_id;
-                    startTime = new Date();
-                    
-                    document.getElementById('taskId').textContent = currentTaskId;
-                    document.getElementById('taskId').classList.remove('hidden');
-                    document.getElementById('startBtn').classList.add('hidden');
-                    document.getElementById('stopBtn').classList.remove('hidden');
-                    
-                    showAlert(Automation started! Task ID: ${currentTaskId});
-                    startStatusUpdates();
-                    switchTab('monitor');
-                } else {
-                    showAlert(result.error, 'error');
-                }
-            } catch (error) {
-                showAlert('Error starting automation: ' + error.message, 'error');
-            }
-        }
+  // Upload files
+  document.getElementById('uploadForm').addEventListener('submit', async function (e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+    try {
+      const response = await axios.post('/upload', formData);
+      if (response.data.success) {
+        uploadedData = response.data.files;
+        alert('Files uploaded successfully!');
+      } else {
+        alert('Upload failed: ' + response.data.error);
+      }
+    } catch (error) {
+      alert('Upload error: ' + error.message);
+    }
+  });
 
-        // Stop automation
-        async function stopAutomation() {
-            if (!currentTaskId) {
-                showAlert('No active task to stop.', 'error');
-                return;
-            }
-            
-            try {
-                const response = await fetch('/stop_automation', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ task_id: currentTaskId })
-                });
-                
-                const result = await response.json();
-                
-                if (result.success) {
-                    showAlert(result.message);
-                } else {
-                    showAlert(result.error, 'error');
-                }
-            } catch (error) {
-                showAlert('Error stopping automation: ' + error.message, 'error');
-            }
-        }
+  // Start automation
+  document.getElementById('automationForm').addEventListener('submit', async function (e) {
+    e.preventDefault();
+    if (!uploadedData.tokens || !uploadedData.comments) {
+      return alert('Please upload both tokens and comments files first.');
+    }
 
-        // Start status updates
-        function startStatusUpdates() {
-            if (updateInterval) clearInterval(updateInterval);
-            
-            updateInterval = setInterval(async () => {
-                await refreshStatus();
-                updateUptime();
-            }, 2000);
-        }
+    const payload = {
+      tokens: uploadedData.tokens,
+      comments: uploadedData.comments,
+      post_ids: document.getElementById('post_ids').value,
+      delay: parseInt(document.getElementById('delay').value),
+      mention_id: document.getElementById('mention_id').value,
+      mention_name: document.getElementById('mention_name').value
+    };
 
-        // Stop status updates
-        function stopStatusUpdates() {
-            if (updateInterval) {
-                clearInterval(updateInterval);
-                updateInterval = null;
-            }
-        }
+    try {
+      const response = await axios.post('/start_automation', payload);
+      if (response.data.success) {
+        document.getElementById('task_id').value = response.data.task_id;
+        alert(`Automation started. Task ID: ${response.data.task_id}`);
+      } else {
+        alert('Failed to start: ' + response.data.error);
+      }
+    } catch (error) {
+      alert('Start error: ' + error.message);
+    }
+  });
 
-        // Refresh status
-        async function refreshStatus() {
-            try {
-                const response = await fetch('/status');
-                const status = await response.json();
-                
-                updateStatusDisplay(status);
-                updateLogs(status.logs);
-                
-                if (!status.running && currentTaskId) {
-                    // Automation stopped
-                    currentTaskId = null;
-                    startTime = null;
-                    document.getElementById('taskId').classList.add('hidden');
-                    document.getElementById('startBtn').classList.remove('hidden');
-                    document.getElementById('stopBtn').classList.add('hidden');
-                    stopStatusUpdates();
-                }
-                
-                // Refresh tasks
-                await refreshTasks();
-                
-            } catch (error) {
-                console.error('Error refreshing status:', error);
-            }
-        }
+  // Stop automation
+  document.getElementById('stopForm').addEventListener('submit', async function (e) {
+    e.preventDefault();
+    const task_id = document.getElementById('task_id').value;
+    if (!task_id) return alert('Task ID required.');
 
-        // Update status display
-        function updateStatusDisplay(status) {
-            const statusBadge = document.getElementById('statusBadge');
-            const statusIcon = statusBadge.querySelector('i');
-            const statusText = statusBadge.querySelector('span');
-            
-            if (status.running) {
-                statusBadge.className = 'status-badge status-running';
-                statusIcon.className = 'fas fa-play';
-                statusText.textContent = 'Running';
-            } else {
-                statusBadge.className = 'status-badge status-idle';
-                statusIcon.className = 'fas fa-pause';
-                statusText.textContent = 'Idle';
-            }
-            
-            document.getElementById('currentComment').textContent = status.current_comment;
-            document.getElementById('currentToken').textContent = status.current_token || '-';
-            document.getElementById('currentPost').textContent = status.current_post || '-';
-        }
+    try {
+      const response = await axios.post('/stop_automation', { task_id });
+      alert(response.data.message);
+    } catch (error) {
+      alert('Stop error: ' + error.message);
+    }
+  });
 
-        // Update logs
-        function updateLogs(logs) {
-            const container = document.getElementById('logsContainer');
-            container.innerHTML = '';
-            
-            logs.slice(-20).reverse().forEach(log => {
-                const logEntry = document.createElement('div');
-                logEntry.className = 'log-entry';
-                logEntry.innerHTML = `
-                    <span class="log-timestamp">[${log.timestamp}]</span>
-                    <span class="log-${log.level}">${log.message}</span>
-                `;
-                container.appendChild(logEntry);
-            });
-        }
-
-        // Update uptime
-        function updateUptime() {
-            if (!startTime) {
-                document.getElementById('uptime').textContent = '00:00:00';
-                return;
-            }
-            
-            const now = new Date();
-            const diff = now - startTime;
-            const hours = Math.floor(diff / 3600000);
-            const minutes = Math.floor((diff % 3600000) / 60000);
-            const seconds = Math.floor((diff % 60000) / 1000);
-            
-            document.getElementById('uptime').textContent = 
-                ${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')};
-        }
-
-        // Refresh tasks
-        async function refreshTasks() {
-            try {
-                const response = await fetch('/tasks');
-                const result = await response.json();
-                
-                const container = document.getElementById('tasksContainer');
-                container.innerHTML = '';
-                
-                if (Object.keys(result.tasks).length === 0) {
-                    container.innerHTML = '<p style="text-align: center; color: #666; padding: 20px;">No tasks found.</p>';
-                    return;
-                }
-                
-                Object.values(result.tasks).forEach(task => {
-                    const taskCard = document.createElement('div');
-                    taskCard.className = 'task-card';
-                    taskCard.innerHTML = `
-                        <div class="task-header">
-                            <span class="task-id">${task.id}</span>
-                            <span class="status-badge ${task.status === 'running' ? 'status-running' : 'status-stopped'}">
-                                <i class="fas fa-${task.status === 'running' ? 'play' : 'stop'}"></i>
-                                ${task.status}
-                            </span>
-                        </div>
-                        <div style="font-size: 0.9rem; color: #666;">
-                            <div>Started: ${new Date(task.start_time).toLocaleString()}</div>
-                            <div>Comments Posted: ${task.comments_posted || 0}</div>
-                            <div>Tokens: ${task.tokens_count} | Comments: ${task.comments_count} | Posts: ${task.post_ids_count}</div>
-                        </div>
-                        ${task.status === 'running' ? `
-                            <button class="btn btn-danger" style="width: auto; margin-top: 10px;" onclick="stopSpecificTask('${task.id}')">
-                                <i class="fas fa-stop"></i> Stop Task
-                            </button>
-                        ` : ''}
-                    `;
-                    container.appendChild(taskCard);
-                });
-                
-            } catch (error) {
-                console.error('Error refreshing tasks:', error);
-            }
-        }
-
-        // Stop specific task
-        async function stopSpecificTask(taskId) {
-            try {
-                const response = await fetch('/stop_automation', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ task_id: taskId })
-                });
-                
-                const result = await response.json();
-                
-                if (result.success) {
-                    showAlert(Task ${taskId} stop signal sent!);
-                    await refreshTasks();
-                } else {
-                    showAlert(result.error, 'error');
-                }
-            } catch (error) {
-                showAlert('Error stopping task: ' + error.message, 'error');
-            }
-        }
-
-        // Clear completed tasks
-        async function clearCompletedTasks() {
-            try {
-                const response = await fetch('/clear_completed_tasks', {
-                    method: 'POST'
-                });
-                
-                const result = await response.json();
-                
-                if (result.success) {
-                    showAlert('Completed tasks cleared!');
-                    await refreshTasks();
-                } else {
-                    showAlert('Error clearing tasks', 'error');
-                }
-            } catch (error) {
-                showAlert('Error clearing tasks: ' + error.message, 'error');
-            }
-        }
-
-        // Download logs
-        function downloadLogs() {
-            window.open('/download_logs', '_blank');
-        }
-
-        // Auto-refresh when page becomes visible
-        document.addEventListener('visibilitychange', function() {
-            if (!document.hidden) {
-                refreshStatus();
-            }
-        });
-
-        // Initialize page
-        document.addEventListener('DOMContentLoaded', function() {
-            refreshStatus();
-            
-            // Set up file upload labels
-            document.getElementById('tokensFile').addEventListener('change', function(e) {
-                const label = document.querySelector('label[for="tokensFile"]');
-                if (e.target.files.length > 0) {
-                    label.innerHTML = <i class="fas fa-check"></i> ${e.target.files[0].name};
-                    label.style.background = '#4CAF50';
-                    label.style.color = 'white';
-                }
-            });
-            
-            document.getElementById('commentsFile').addEventListener('change', function(e) {
-                const label = document.querySelector('label[for="commentsFile"]');
-                if (e.target.files.length > 0) {
-                    label.innerHTML = <i class="fas fa-check"></i> ${e.target.files[0].name};
-                    label.style.background = '#4CAF50';
-                    label.style.color = 'white';
-                }
-            });
-        });
-
-        // Handle touch interactions for mobile
-        let touchStartY = 0;
-        
-        document.addEventListener('touchstart', function(e) {
-            touchStartY = e.touches[0].clientY;
-        });
-        
-        document.addEventListener('touchmove', function(e) {
-            const touchY = e.touches[0].clientY;
-            const touchDiff = touchStartY - touchY;
-            
-            // Pull to refresh
-            if (touchDiff < -100 && window.scrollY === 0) {
-                refreshStatus();
-                showAlert('Status refreshed!');
-            }
-        });
-
-        // Keyboard shortcuts
-        document.addEventListener('keydown', function(e) {
-            // Ctrl/Cmd + R to refresh
-            if ((e.ctrlKey || e.metaKey) && e.key === 'r') {
-                e.preventDefault();
-                refreshStatus();
-            }
-            
-            // Ctrl/Cmd + S to start automation
-            if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-                e.preventDefault();
-                if (!currentTaskId) {
-                    startAutomation();
-                }
-            }
-            
-            // Ctrl/Cmd + X to stop automation
-            if ((e.ctrlKey || e.metaKey) && e.key === 'x') {
-                e.preventDefault();
-                if (currentTaskId) {
-                    stopAutomation();
-                }
-            }
-        });
-
-        // Service Worker for offline functionality (optional)
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', function() {
-                navigator.serviceWorker.register('/sw.js').then(function(registration) {
-                    console.log('ServiceWorker registration successful');
-                }, function(err) {
-                    console.log('ServiceWorker registration failed: ', err);
-                });
-            });
-        }
-
-        // Auto-save form data to prevent data loss
-        function saveFormData() {
-            const formData = {
-                tokens: document.getElementById('tokensInput').value,
-                comments: document.getElementById('commentsInput').value,
-                postIds: document.getElementById('postIds').value,
-                delay: document.getElementById('delay').value,
-                mentionId: document.getElementById('mentionId').value,
-                mentionName: document.getElementById('mentionName').value
-            };
-            
-            try {
-                localStorage.setItem('automationFormData', JSON.stringify(formData));
-            } catch (e) {
-                console.log('Could not save form data to localStorage');
-            }
-        }
-
-        // Load saved form data
-        function loadFormData() {
-            try {
-                const savedData = localStorage.getItem('automationFormData');
-                if (savedData) {
-                    const formData = JSON.parse(savedData);
-                    
-                    document.getElementById('tokensInput').value = formData.tokens || '';
-                    document.getElementById('commentsInput').value = formData.comments || '';
-                    document.getElementById('postIds').value = formData.postIds || '';
-                    document.getElementById('delay').value = formData.delay || '60';
-                    document.getElementById('mentionId').value = formData.mentionId || '';
-                    document.getElementById('mentionName').value = formData.mentionName || '';
-                }
-            } catch (e) {
-                console.log('Could not load form data from localStorage');
-            }
-        }
-
-        // Auto-save on input change
-        document.querySelectorAll('input, textarea').forEach(input => {
-            input.addEventListener('input', saveFormData);
-        });
-
-        // Load form data on page load
-        document.addEventListener('DOMContentLoaded', function() {
-            loadFormData();
-        });
-
-        // Network status indicator
-        function updateNetworkStatus() {
-            const statusBadge = document.getElementById('statusBadge');
-            
-            if (!navigator.onLine) {
-                statusBadge.style.opacity = '0.5';
-                showAlert('You appear to be offline. Some features may not work.', 'error');
-            } else {
-                statusBadge.style.opacity = '1';
-            }
-        }
-
-        window.addEventListener('online', updateNetworkStatus);
-        window.addEventListener('offline', updateNetworkStatus);
-
-        // Enhanced error handling for API calls
-        async function apiCall(url, options = {}) {
-            try {
-                const response = await fetch(url, {
-                    ...options,
-                    headers: {
-                        'Content-Type': 'application/json',
-                        ...options.headers
-                    }
-                });
-                
-                if (!response.ok) {
-                    throw new Error(HTTP error! status: ${response.status});
-                }
-                
-                return await response.json();
-            } catch (error) {
-                if (error.name === 'TypeError' && error.message.includes('fetch')) {
-                    showAlert('Network error. Please check your connection.', 'error');
-                } else {
-                    showAlert(API Error: ${error.message}, 'error');
-                }
-                throw error;
-            }
-        }
-
-        // Background sync for status updates
-        let isBackgroundSync = false;
-        
-        function startBackgroundSync() {
-            if (isBackgroundSync) return;
-            isBackgroundSync = true;
-            
-            setInterval(() => {
-                if (!document.hidden && currentTaskId) {
-                    refreshStatus();
-                }
-            }, 5000);
-        }
-
-        // Start background sync when automation is running
-        document.addEventListener('DOMContentLoaded', function() {
-            startBackgroundSync();
-        });
-
-        // PWA install prompt
-        let deferredPrompt;
-        
-        window.addEventListener('beforeinstallprompt', (e) => {
-            e.preventDefault();
-            deferredPrompt = e;
-            
-            // Show install button or prompt
-            const installAlert = document.createElement('div');
-            installAlert.className = 'alert alert-success';
-            installAlert.innerHTML = `
-                <i class="fas fa-mobile-alt"></i>
-                Install this app for better mobile experience!
-                <button class="btn btn-primary" style="margin-left: 10px;" onclick="installApp()">
-                    Install
-                </button>
-            `;
-            document.getElementById('alertContainer').appendChild(installAlert);
-        });
-
-        function installApp() {
-            if (deferredPrompt) {
-                deferredPrompt.prompt();
-                deferredPrompt.userChoice.then((choiceResult) => {
-                    if (choiceResult.outcome === 'accepted') {
-                        showAlert('App installed successfully!');
-                    }
-                    deferredPrompt = null;
-                });
-            }
-        }
-    </script>
+  // Refresh status
+  document.getElementById('refreshStatus').addEventListener('click', async () => {
+    try {
+      const res = await axios.get('/status');
+      document.getElementById('statusBox').textContent = JSON.stringify(res.data, null, 2);
+    } catch (err) {
+      document.getElementById('statusBox').textContent = 'Error fetching status.';
+    }
+  });
+</script>
 </body>
 </html>
