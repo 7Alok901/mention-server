@@ -81,9 +81,9 @@ class CommentAutomation:
             # Handle None values properly
             if token_type == 'page' or (token_type == 'auto' and page_id):
                 # Try page token validation first
-                if page_id and page_id.strip():  # Check if page_id exists and not empty
+                if page_id and str(page_id).strip():  # Check if page_id exists and not empty
                     response = requests.get(
-                        f'https://graph.facebook.com/v18.0/{page_id.strip()}',
+                        f'https://graph.facebook.com/v18.0/{str(page_id).strip()}',
                         params={'access_token': token},
                         headers=headers,
                         timeout=10
@@ -501,9 +501,9 @@ def start_automation():
         comments = data.get('comments', [])
         post_ids = [pid.strip() for pid in data.get('post_ids', '').split(',') if pid.strip()]
         delay = max(60, int(data.get('delay', 60)))
-        mention_id = data.get('mention_id', '').strip() or None
-        mention_name = data.get('mention_name', '').strip() or None
-        page_id = data.get('page_id', '').strip() or None  # Page ID parameter
+        mention_id = data.get('mention_id', '').strip() if data.get('mention_id') else None
+        mention_name = data.get('mention_name', '').strip() if data.get('mention_name') else None
+        page_id = data.get('page_id', '').strip() if data.get('page_id') else None  # Page ID parameter
         token_type = data.get('token_type', 'auto')  # Token type parameter
 
         if not tokens or not comments or not post_ids:
@@ -550,8 +550,8 @@ def validate_tokens():
         page_id = data.get('page_id', '')
         token_type = data.get('token_type', 'auto')
         
-        # Properly handle empty strings
-        page_id = page_id.strip() if page_id else None
+        # Properly handle None and empty strings
+        page_id = page_id.strip() if page_id and page_id is not None else None
         
         if not tokens:
             return jsonify({'success': False, 'error': 'No tokens provided'})
