@@ -1,163 +1,560 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>SBR MENTION TOOL</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <!-- Bootstrap 5 CDN -->
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FB Comment Automation</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
 </head>
 <body class="bg-light">
+    <div class="container mt-4">
+        <div class="row justify-content-center">
+            <div class="col-lg-10">
+                <!-- Header -->
+                <div class="text-center mb-4">
+                    <h1><i class="fab fa-facebook text-primary me-2"></i>FB Comment Automation</h1>
+                    <p class="text-muted">Automate Facebook comments with token management</p>
+                </div>
 
-<div class="container my-4">
-<h2 class="text-center mb-4" style="color: #ff6600;">𑁔𑁔★ 𝕊𝔹ℝ ℝ𝕌𝕃𝔼𝕏 ℍ𝔼ℝ𝔼 ★𑁔𑁔</h2>
+                <!-- Navigation Tabs -->
+                <ul class="nav nav-tabs mb-4" id="mainTabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="setup-tab" data-bs-toggle="tab" data-bs-target="#setup" type="button" role="tab">
+                            <i class="fas fa-cog me-1"></i>Setup
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="status-tab" data-bs-toggle="tab" data-bs-target="#status" type="button" role="tab">
+                            <i class="fas fa-chart-line me-1"></i>Status
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="tasks-tab" data-bs-toggle="tab" data-bs-target="#tasks" type="button" role="tab">
+                            <i class="fas fa-tasks me-1"></i>Tasks
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="logs-tab" data-bs-toggle="tab" data-bs-target="#logs" type="button" role="tab">
+                            <i class="fas fa-file-alt me-1"></i>Logs
+                        </button>
+                    </li>
+                </ul>
 
+                <!-- Tab Content -->
+                <div class="tab-content" id="mainTabsContent">
+                    
+                    <!-- Setup Tab -->
+                    <div class="tab-pane fade show active" id="setup" role="tabpanel">
+                        <form id="automationForm">
+                            <!-- Token Configuration -->
+                            <div class="card mb-4">
+                                <div class="card-header">
+                                    <h5><i class="fas fa-key text-warning me-2"></i>Token Configuration</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div class="row mb-3">
+                                        <div class="col-md-6">
+                                            <label class="form-label">Token Type</label>
+                                            <select class="form-select" id="tokenType">
+                                                <option value="auto">Auto Detect</option>
+                                                <option value="user">User Token</option>
+                                                <option value="page">Page Token</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label">Page ID (optional)</label>
+                                            <input type="text" class="form-control" id="pageId" placeholder="Page ID for page tokens">
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="mb-3">
+                                        <label class="form-label">Access Tokens</label>
+                                        <input type="file" class="form-control mb-2" id="tokensFile" accept=".txt">
+                                        <textarea class="form-control" id="tokensText" rows="4" placeholder="Or paste tokens here (one per line)"></textarea>
+                                    </div>
+                                    
+                                    <button type="button" class="btn btn-outline-primary" id="validateTokens">
+                                        <i class="fas fa-check me-2"></i>Validate Tokens
+                                    </button>
+                                    <div id="tokenValidationResult" class="mt-3"></div>
+                                </div>
+                            </div>
 
-  <h5 class="text-center mb-4" style="color: #ff6600;">SBR MENTION TOOL</h5>
+                            <!-- Comments Configuration -->
+                            <div class="card mb-4">
+                                <div class="card-header">
+                                    <h5><i class="fas fa-comments text-info me-2"></i>Comments</h5>
+                                </div>
+                                <div class="card-body">
+                                    <label class="form-label">Comments</label>
+                                    <input type="file" class="form-control mb-2" id="commentsFile" accept=".txt">
+                                    <textarea class="form-control" id="commentsText" rows="4" placeholder="Paste comments here (one per line)" required></textarea>
+                                </div>
+                            </div>
 
-  <!-- Upload Section -->
-  <div class="card mb-3">
-    <div class="card-body">
-      <h5>1. Upload Files</h5>
-      <form id="uploadForm" enctype="multipart/form-data">
-        <div class="mb-2">
-          <label for="tokens" class="form-label">Tokens File</label>
-          <input type="file" class="form-control" id="tokens" name="tokens" required>
+                            <!-- Post Configuration -->
+                            <div class="card mb-4">
+                                <div class="card-header">
+                                    <h5><i class="fas fa-link text-success me-2"></i>Post Configuration</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div class="mb-3">
+                                        <label class="form-label">Post IDs (comma separated)</label>
+                                        <textarea class="form-control" id="postIds" rows="3" placeholder="123456789_987654321, 111222333_444555666" required></textarea>
+                                    </div>
+                                    
+                                    <div class="row">
+                                        <div class="col-md-4">
+                                            <label class="form-label">Delay (seconds)</label>
+                                            <input type="number" class="form-control" id="delay" value="60" min="60" required>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label class="form-label">Mention ID (optional)</label>
+                                            <input type="text" class="form-control" id="mentionId" placeholder="User ID">
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label class="form-label">Mention Name (optional)</label>
+                                            <input type="text" class="form-control" id="mentionName" placeholder="User Name">
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <button type="submit" class="btn btn-success btn-lg w-100" id="startBtn">
+                                <i class="fas fa-play me-2"></i>Start Automation
+                            </button>
+                        </form>
+                    </div>
+
+                    <!-- Status Tab -->
+                    <div class="tab-pane fade" id="status" role="tabpanel">
+                        <div class="card">
+                            <div class="card-header d-flex justify-content-between">
+                                <h5><i class="fas fa-info-circle text-primary me-2"></i>Current Status</h5>
+                                <button class="btn btn-sm btn-outline-primary" id="refreshStatus">
+                                    <i class="fas fa-sync-alt"></i>
+                                </button>
+                            </div>
+                            <div class="card-body">
+                                <div id="statusContent">
+                                    <div class="text-center">
+                                        <div class="spinner-border" role="status"></div>
+                                        <p>Loading status...</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Tasks Tab -->
+                    <div class="tab-pane fade" id="tasks" role="tabpanel">
+                        <div class="card">
+                            <div class="card-header d-flex justify-content-between">
+                                <h5><i class="fas fa-tasks text-warning me-2"></i>Tasks</h5>
+                                <div>
+                                    <button class="btn btn-sm btn-outline-primary me-2" id="refreshTasks">
+                                        <i class="fas fa-sync-alt"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-danger" id="clearCompleted">
+                                        <i class="fas fa-trash me-1"></i>Clear
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <div id="tasksContent">
+                                    <div class="text-center">
+                                        <div class="spinner-border" role="status"></div>
+                                        <p>Loading tasks...</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Logs Tab -->
+                    <div class="tab-pane fade" id="logs" role="tabpanel">
+                        <div class="card">
+                            <div class="card-header d-flex justify-content-between">
+                                <h5><i class="fas fa-file-alt text-info me-2"></i>Logs</h5>
+                                <div>
+                                    <button class="btn btn-sm btn-outline-primary me-2" id="refreshLogs">
+                                        <i class="fas fa-sync-alt"></i>
+                                    </button>
+                                    <a href="/download_logs" class="btn btn-sm btn-outline-success">
+                                        <i class="fas fa-download me-1"></i>Download
+                                    </a>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <div id="logsContent" style="background: #000; color: #0f0; font-family: monospace; max-height: 400px; overflow-y: auto; padding: 10px;">
+                                    <div class="text-center">
+                                        Loading logs...
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
-        <div class="mb-3">
-          <label for="comments" class="form-label">Comments File</label>
-          <input type="file" class="form-control" id="comments" name="comments" required>
-        </div>
-        <button type="submit" class="btn btn-primary w-100">Upload</button>
-      </form>
     </div>
-  </div>
 
-  <!-- Automation Config -->
-  <div class="card mb-3">
-    <div class="card-body">
-      <h5>2. Configure Loader</h5>
-      <form id="automationForm">
-        <div class="mb-2">
-          <label for="post_ids" class="form-label">Post IDs (comma separated)</label>
-          <input type="text" class="form-control" id="post_ids" required>
-        </div>
-        <div class="mb-2">
-          <label for="delay" class="form-label">Minimum Delay (seconds)</label>
-          <input type="number" class="form-control" id="delay" value="60" min="60" required>
-        </div>
-        <div class="mb-2">
-          <label for="mention_id" class="form-label">Mention ID (optional)</label>
-          <input type="text" class="form-control" id="mention_id">
-        </div>
-        <div class="mb-3">
-          <label for="mention_name" class="form-label">Mention Name (optional)</label>
-          <input type="text" class="form-control" id="mention_name">
-        </div>
-        <button type="submit" class="btn btn-success w-100">Start Loader</button>
-      </form>
-    </div>
-  </div>
+    <!-- Bootstrap JS -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
+    
+    <script>
+        let currentTaskId = null;
 
-  <!-- Stop Task -->
-  <div class="card mb-3">
-    <div class="card-body">
-      <h5>3. Stop Loader</h5>
-      <form id="stopForm">
-        <label for="task_id" class="form-label">Task ID</label>
-        <input type="text" class="form-control mb-2" id="task_id" placeholder="Enter Task ID to stop" required>
-        <button type="submit" class="btn btn-danger w-100">Stop Loader</button>
-      </form>
-    </div>
-  </div>
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            setupEventListeners();
+            refreshStatus();
+        });
 
-  <!-- Status / Logs -->
-  <div class="card mb-4">
-    <div class="card-body">
-      <h5>4. Status & Logs</h5>
-      <button class="btn btn-outline-primary w-100 mb-2" id="refreshStatus">Refresh Status</button>
-      <pre id="statusBox" class="bg-dark text-white p-2 rounded" style="height: 200px; overflow-y: scroll;"></pre>
-      <a href="/download_logs" class="btn btn-outline-secondary w-100">Download Logs</a>
-    </div>
-  </div>
-</div>
+        function setupEventListeners() {
+            // File uploads
+            document.getElementById('tokensFile').addEventListener('change', function(e) {
+                const file = e.target.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = e => document.getElementById('tokensText').value = e.target.result;
+                    reader.readAsText(file);
+                }
+            });
 
-<!-- Bootstrap JS + Axios -->
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+            document.getElementById('commentsFile').addEventListener('change', function(e) {
+                const file = e.target.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = e => document.getElementById('commentsText').value = e.target.result;
+                    reader.readAsText(file);
+                }
+            });
 
-<script>
-  let uploadedData = {};
+            // Form handlers
+            document.getElementById('validateTokens').addEventListener('click', validateTokens);
+            document.getElementById('automationForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                startAutomation();
+            });
 
-  // Upload files
-  document.getElementById('uploadForm').addEventListener('submit', async function (e) {
-    e.preventDefault();
-    const formData = new FormData(this);
-    try {
-      const response = await axios.post('/upload', formData);
-      if (response.data.success) {
-        uploadedData = response.data.files;
-        alert('Files uploaded successfully!');
-      } else {
-        alert('Upload failed: ' + response.data.error);
-      }
-    } catch (error) {
-      alert('Upload error: ' + error.message);
-    }
-  });
+            // Refresh buttons
+            document.getElementById('refreshStatus').addEventListener('click', refreshStatus);
+            document.getElementById('refreshTasks').addEventListener('click', refreshTasks);
+            document.getElementById('refreshLogs').addEventListener('click', refreshLogs);
+            document.getElementById('clearCompleted').addEventListener('click', clearCompletedTasks);
 
-  // Start automation
-  document.getElementById('automationForm').addEventListener('submit', async function (e) {
-    e.preventDefault();
-    if (!uploadedData.tokens || !uploadedData.comments) {
-      return alert('Please upload both tokens and comments files first.');
-    }
+            // Tab events
+            document.getElementById('status-tab').addEventListener('shown.bs.tab', refreshStatus);
+            document.getElementById('tasks-tab').addEventListener('shown.bs.tab', refreshTasks);
+            document.getElementById('logs-tab').addEventListener('shown.bs.tab', refreshLogs);
+        }
 
-    const payload = {
-      tokens: uploadedData.tokens,
-      comments: uploadedData.comments,
-      post_ids: document.getElementById('post_ids').value,
-      delay: parseInt(document.getElementById('delay').value),
-      mention_id: document.getElementById('mention_id').value,
-      mention_name: document.getElementById('mention_name').value
-    };
+        async function validateTokens() {
+            const tokens = getTokens();
+            const pageId = document.getElementById('pageId').value.trim();
+            const tokenType = document.getElementById('tokenType').value;
 
-    try {
-      const response = await axios.post('/start_automation', payload);
-      if (response.data.success) {
-        document.getElementById('task_id').value = response.data.task_id;
-        alert(`Automation started. Task ID: ${response.data.task_id}`);
-      } else {
-        alert('Failed to start: ' + response.data.error);
-      }
-    } catch (error) {
-      alert('Start error: ' + error.message);
-    }
-  });
+            if (!tokens.length) {
+                showAlert('Please enter tokens first', 'warning');
+                return;
+            }
 
-  // Stop automation
-  document.getElementById('stopForm').addEventListener('submit', async function (e) {
-    e.preventDefault();
-    const task_id = document.getElementById('task_id').value;
-    if (!task_id) return alert('Task ID required.');
+            const btn = document.getElementById('validateTokens');
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Validating...';
+            btn.disabled = true;
 
-    try {
-      const response = await axios.post('/stop_automation', { task_id });
-      alert(response.data.message);
-    } catch (error) {
-      alert('Stop error: ' + error.message);
-    }
-  });
+            try {
+                const response = await fetch('/validate_tokens', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        tokens: tokens,
+                        page_id: pageId || null,
+                        token_type: tokenType
+                    })
+                });
 
-  // Refresh status
-  document.getElementById('refreshStatus').addEventListener('click', async () => {
-    try {
-      const res = await axios.get('/status');
-      document.getElementById('statusBox').textContent = JSON.stringify(res.data, null, 2);
-    } catch (err) {
-      document.getElementById('statusBox').textContent = 'Error fetching status.';
-    }
-  });
-</script>
+                const data = await response.json();
+                
+                if (data.success) {
+                    let html = `<div class="alert alert-info">
+                        <strong>Result:</strong> ${data.valid_tokens}/${data.total_tokens} valid tokens
+                    </div>`;
+
+                    if (data.tokens_info && data.tokens_info.length > 0) {
+                        data.tokens_info.forEach(token => {
+                            html += `<div class="badge bg-${token.type === 'page' ? 'primary' : 'success'} me-2 mb-1">
+                                ${token.name} (${token.type})
+                            </div>`;
+                        });
+                    }
+
+                    document.getElementById('tokenValidationResult').innerHTML = html;
+                } else {
+                    showAlert(`Validation failed: ${data.error}`, 'danger');
+                }
+            } catch (error) {
+                showAlert(`Error: ${error.message}`, 'danger');
+            } finally {
+                btn.innerHTML = '<i class="fas fa-check me-2"></i>Validate Tokens';
+                btn.disabled = false;
+            }
+        }
+
+        async function startAutomation() {
+            const tokens = getTokens();
+            const comments = getComments();
+            const postIds = document.getElementById('postIds').value.trim();
+            const delay = parseInt(document.getElementById('delay').value);
+            const mentionId = document.getElementById('mentionId').value.trim();
+            const mentionName = document.getElementById('mentionName').value.trim();
+            const pageId = document.getElementById('pageId').value.trim();
+            const tokenType = document.getElementById('tokenType').value;
+
+            if (!tokens.length || !comments.length || !postIds) {
+                showAlert('Please fill in all required fields', 'warning');
+                return;
+            }
+
+            const btn = document.getElementById('startBtn');
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Starting...';
+            btn.disabled = true;
+
+            try {
+                const response = await fetch('/start_automation', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        tokens: tokens,
+                        comments: comments,
+                        post_ids: postIds,
+                        delay: delay,
+                        mention_id: mentionId || null,
+                        mention_name: mentionName || null,
+                        page_id: pageId || null,
+                        token_type: tokenType
+                    })
+                });
+
+                const data = await response.json();
+                
+                if (data.success) {
+                    currentTaskId = data.task_id;
+                    showAlert(`Automation started! Task ID: ${data.task_id}`, 'success');
+                    document.getElementById('status-tab').click();
+                } else {
+                    showAlert(`Failed: ${data.error}`, 'danger');
+                }
+            } catch (error) {
+                showAlert(`Error: ${error.message}`, 'danger');
+            } finally {
+                btn.innerHTML = '<i class="fas fa-play me-2"></i>Start Automation';
+                btn.disabled = false;
+            }
+        }
+
+        async function stopTask(taskId) {
+            try {
+                const response = await fetch('/stop_automation', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ task_id: taskId })
+                });
+
+                const data = await response.json();
+                
+                if (data.success) {
+                    showAlert(`Stop signal sent for task ${taskId}`, 'info');
+                    refreshTasks();
+                } else {
+                    showAlert(`Failed to stop: ${data.error}`, 'danger');
+                }
+            } catch (error) {
+                showAlert(`Error: ${error.message}`, 'danger');
+            }
+        }
+
+        async function refreshStatus() {
+            try {
+                const response = await fetch('/status');
+                const data = await response.json();
+                
+                let html = '';
+                if (data.running) {
+                    html = `
+                        <div class="alert alert-success">
+                            <div class="d-flex align-items-center">
+                                <div class="spinner-grow spinner-grow-sm text-success me-2"></div>
+                                <div>
+                                    <strong>Automation Running</strong><br>
+                                    <small>Task ID: ${data.task_id}</small>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="row text-center">
+                            <div class="col-md-4">
+                                <div class="card">
+                                    <div class="card-body">
+                                        <h5 class="text-primary">${data.current_comment}</h5>
+                                        <small>Comments Posted</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="card">
+                                    <div class="card-body">
+                                        <h6 class="text-info">${data.current_token}</h6>
+                                        <small>Current Token</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="card">
+                                    <div class="card-body">
+                                        <small class="text-warning">Current Post</small><br>
+                                        <small>${data.current_post}</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    html = `
+                        <div class="alert alert-secondary text-center">
+                            <i class="fas fa-pause-circle fa-2x mb-2"></i>
+                            <h5>No Automation Running</h5>
+                            <p>Configure and start from Setup tab</p>
+                        </div>
+                    `;
+                }
+                
+                document.getElementById('statusContent').innerHTML = html;
+            } catch (error) {
+                document.getElementById('statusContent').innerHTML = 
+                    `<div class="alert alert-danger">Error: ${error.message}</div>`;
+            }
+        }
+
+        async function refreshTasks() {
+            try {
+                const response = await fetch('/tasks');
+                const data = await response.json();
+                
+                if (!data.tasks || Object.keys(data.tasks).length === 0) {
+                    document.getElementById('tasksContent').innerHTML = 
+                        '<div class="text-center text-muted"><p>No active tasks</p></div>';
+                    return;
+                }
+                
+                let html = '';
+                Object.values(data.tasks).forEach(task => {
+                    const statusClass = task.status === 'running' ? 'success' : 
+                                       task.status === 'stopping' ? 'warning' : 'secondary';
+                    
+                    html += `
+                        <div class="card mb-3">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between">
+                                    <div>
+                                        <h6>Task ${task.id} <span class="badge bg-${statusClass}">${task.status}</span></h6>
+                                        <small class="text-muted">
+                                            Started: ${new Date(task.start_time).toLocaleString()}<br>
+                                            Tokens: ${task.tokens_count} | Comments: ${task.comments_count} | Posted: ${task.comments_posted || 0}
+                                        </small>
+                                    </div>
+                                    ${task.status === 'running' ? 
+                                        `<button class="btn btn-sm btn-outline-danger" onclick="stopTask('${task.id}')">
+                                            <i class="fas fa-stop"></i> Stop
+                                        </button>` : ''
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                });
+                
+                document.getElementById('tasksContent').innerHTML = html;
+            } catch (error) {
+                document.getElementById('tasksContent').innerHTML = 
+                    `<div class="alert alert-danger">Error: ${error.message}</div>`;
+            }
+        }
+
+        async function refreshLogs() {
+            try {
+                const response = await fetch('/status');
+                const data = await response.json();
+                
+                if (!data.logs || data.logs.length === 0) {
+                    document.getElementById('logsContent').innerHTML = 
+                        '<div class="text-center">No logs available</div>';
+                    return;
+                }
+                
+                let html = '';
+                data.logs.slice(-50).forEach(log => {
+                    const color = log.level === 'error' ? '#f00' : 
+                                  log.level === 'warning' ? '#fa0' : '#0f0';
+                    
+                    html += `<div style="color: ${color}; margin-bottom: 3px;">
+                        [${log.timestamp}] ${log.level.toUpperCase()}: ${log.message}
+                    </div>`;
+                });
+                
+                document.getElementById('logsContent').innerHTML = html;
+                document.getElementById('logsContent').scrollTop = document.getElementById('logsContent').scrollHeight;
+            } catch (error) {
+                document.getElementById('logsContent').innerHTML = `Error: ${error.message}`;
+            }
+        }
+
+        async function clearCompletedTasks() {
+            try {
+                const response = await fetch('/clear_completed_tasks', { method: 'POST' });
+                const data = await response.json();
+                
+                if (data.success) {
+                    showAlert('Completed tasks cleared', 'success');
+                    refreshTasks();
+                } else {
+                    showAlert(`Error: ${data.error}`, 'danger');
+                }
+            } catch (error) {
+                showAlert(`Error: ${error.message}`, 'danger');
+            }
+        }
+
+        function getTokens() {
+            const text = document.getElementById('tokensText').value.trim();
+            return text ? text.split('\n').filter(t => t.trim()).map(t => t.trim()) : [];
+        }
+
+        function getComments() {
+            const text = document.getElementById('commentsText').value.trim();
+            return text ? text.split('\n').filter(c => c.trim()).map(c => c.trim()) : [];
+        }
+
+        function showAlert(message, type) {
+            const alert = document.createElement('div');
+            alert.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
+            alert.style.cssText = 'top: 20px; right: 20px; z-index: 9999; max-width: 300px;';
+            alert.innerHTML = `
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            
+            document.body.appendChild(alert);
+            setTimeout(() => alert.remove(), 5000);
+        }
+
+        // Auto-refresh status every 10 seconds
+        setInterval(() => {
+            const activeTab = document.querySelector('.nav-link.active').id;
+            if (activeTab === 'status-tab') refreshStatus();
+        }, 10000);
+    </script>
 </body>
 </html>
