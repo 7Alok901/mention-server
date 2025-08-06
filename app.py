@@ -71,37 +71,26 @@ class CommentAutomation:
         return str(uuid.uuid4())[:8]
 
     def validate_token(self, token, page_id=None, token_type='auto'):
-        """
-        Validate token - supports both user and page tokens
-        token_type: 'user', 'page', or 'auto' (auto-detect)
-        """
-        try:
-            headers = {'User-Agent': random.choice(USER_AGENTS)}
-            
-            if token_type == 'page' or (token_type == 'auto' and page_id):
-                # Try page token validation first
-                if page_id:
-                    response = requests.get(
-                        f'https://graph.facebook.com/v18.0/{page_id}',
-                        params={'access_token': token},
-                        headers=headers,
-                        timeout=10
-                    )
-                else:
-                    # Try to get page info from token
-                    response = requests.get(
-                        f'https://graph.facebook.com/v18.0/me',
-                        params={'access_token': token},
-                        headers=headers,
-                        timeout=10
-                    )
-                
-                if response.status_code == 200:
-                    data = response.json()
-                    return True, data.get("name", "Page Token"), 'page'
-                    
-            if token_type == 'user' or token_type == 'auto':
-                # Try user token validation
+    def validate_token(self, token, page_id=None, token_type='auto'):
+    """
+    Validate token - supports both user and page tokens
+    token_type: 'user', 'page', or 'auto' (auto-detect)
+    """
+    try:
+        headers = {'User-Agent': random.choice(USER_AGENTS)}
+        
+        # Fix: Handle None values properly
+        if token_type == 'page' or (token_type == 'auto' and page_id):
+            # Try page token validation first
+            if page_id and page_id.strip():  # ✅ Check if page_id exists and not empty
+                response = requests.get(
+                    f'https://graph.facebook.com/v18.0/{page_id.strip()}',
+                    params={'access_token': token},
+                    headers=headers,
+                    timeout=10
+                )
+            else:
+                # Try to get page info from token
                 response = requests.get(
                     f'https://graph.facebook.com/v18.0/me',
                     params={'access_token': token},
@@ -539,13 +528,17 @@ def start_automation():
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/validate_tokens', methods=['POST'])
+@app.route('/validate_tokens', methods=['POST'])
 def validate_tokens():
     """Endpoint to validate tokens before starting automation"""
     try:
         data = request.json
         tokens = data.get('tokens', [])
-        page_id = data.get('page_id', '').strip() or None
+        page_id = data.get('page_id', '')
         token_type = data.get('token_type', 'auto')
+        
+        # Fix: Properly handle empty strings
+        page_id = page_id.strip() if page_id else None  # ✅ Safe strip
         
         if not tokens:
             return jsonify({'success': False, 'error': 'No tokens provided'})
