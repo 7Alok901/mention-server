@@ -6,7 +6,7 @@ import random
 import threading
 import json
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from requests.exceptions import RequestException
 from werkzeug.utils import secure_filename
 import logging
@@ -239,9 +239,101 @@ class CommentAutomation:
             active_tasks.pop(task_id, None)
             return
 
+        # Initialize token tracking for round-robin and temporary failures
+        token_status = {}
+        for token in valid_tokens:
+            token_status[token['index']] = {
+                'token': token,
+                'status': 'active',
+                'consecutive_failures': 0,
+                'last_failure_time': None,
+                'cooldown_until': None,
+                'total_comments': 0
+            }
+
         comment_count = 0
         token_index = 0
         cycle_count = 0
+
+        def get_next_available_token():
+            """Get next available token using round-robin, skipping temporarily unavailable ones"""
+            nonlocal token_index
+            attempts = 0
+            current_time = datetime.now()
+            
+            while attempts < len(token_status):
+                current_idx = list(token_status.keys())[token_index % len(token_status)]
+                token_info = token_status[current_idx]
+                
+                # Check if token is in cooldown
+                if token_info['cooldown_until'] and current_time < token_info['cooldown_until']:
+                    remaining_cooldown = (token_info['cooldown_until'] - current_time).seconds
+                    self.log_message(f"Token {token_info['token']['name']} in cooldown for {remaining_cooldown}s, skipping...")
+                    token_index += 1
+                    attempts += 1
+                    continue
+                
+                # Check if token is permanently disabled
+                if token_info['status'] == 'disabled':
+                    self.log_message(f"Token {token_info['token']['name']} is disabled, skipping...")
+                    token_index += 1
+                    attempts += 1
+                    continue
+                
+                # Reset cooldown if expired
+                if token_info['cooldown_until'] and current_time >= token_info['cooldown_until']:
+                    token_info['cooldown_until'] = None
+                    token_info['consecutive_failures'] = 0
+                    token_info['status'] = 'active'
+                    self.log_message(f"Token {token_info['token']['name']} cooldown expired, reactivating...")
+                
+                return current_idx, token_info['token']
+            
+            return None, None
+
+        def handle_token_failure(token_idx, error_type):
+            """Handle token failure and set appropriate cooldown"""
+            token_info = token_status[token_idx]
+            token_info['consecutive_failures'] += 1
+            token_info['last_failure_time'] = datetime.now()
+            
+            if error_type == "invalid_token":
+                # Permanently disable invalid tokens
+                token_info['status'] = 'disabled'
+                self.log_message(f"Token {token_info['token']['name']} marked as disabled (invalid)", 'warning')
+                return True  # Token should be removed from rotation
+                
+            elif error_type == "rate_limit":
+                # Set cooldown for rate limited tokens
+                cooldown_minutes = min(token_info['consecutive_failures'] * 10, 60)  # Max 1 hour
+                token_info['cooldown_until'] = datetime.now() + timedelta(minutes=cooldown_minutes)
+                token_info['status'] = 'rate_limited'
+                self.log_message(f"Token {token_info['token']['name']} rate limited, cooldown: {cooldown_minutes}min", 'warning')
+                return False
+                
+            elif error_type == "spam":
+                # Set longer cooldown for spam detection
+                cooldown_minutes = min(token_info['consecutive_failures'] * 20, 120)  # Max 2 hours
+                token_info['cooldown_until'] = datetime.now() + timedelta(minutes=cooldown_minutes)
+                token_info['status'] = 'spam_detected'
+                self.log_message(f"Token {token_info['token']['name']} spam detected, cooldown: {cooldown_minutes}min", 'warning')
+                return False
+                
+            elif error_type == "permissions":
+                # Temporarily disable for permission errors
+                cooldown_minutes = 30
+                token_info['cooldown_until'] = datetime.now() + timedelta(minutes=cooldown_minutes)
+                token_info['status'] = 'permission_error'
+                self.log_message(f"Token {token_info['token']['name']} permission error, cooldown: {cooldown_minutes}min", 'warning')
+                return False
+            
+            else:
+                # General error - short cooldown
+                cooldown_minutes = min(token_info['consecutive_failures'] * 5, 30)  # Max 30 min
+                token_info['cooldown_until'] = datetime.now() + timedelta(minutes=cooldown_minutes)
+                token_info['status'] = 'temporary_error'
+                self.log_message(f"Token {token_info['token']['name']} temporary error, cooldown: {cooldown_minutes}min", 'warning')
+                return False
 
         try:
             while task_id in active_tasks and not self.is_task_stopped(task_id):
@@ -256,39 +348,65 @@ class CommentAutomation:
                         if self.is_task_stopped(task_id):
                             break
 
-                        current_token = valid_tokens[token_index % len(valid_tokens)]
+                        # Get next available token
+                        current_token_idx, current_token = get_next_available_token()
+                        
+                        if current_token is None:
+                            self.log_message("No available tokens at the moment. Waiting 60 seconds...", 'warning')
+                            for _ in range(60):
+                                if self.is_task_stopped(task_id):
+                                    break
+                                time.sleep(1)
+                            continue
+
                         automation_status.update({
                             'current_token': current_token['name'],
                             'current_post': post_id,
                             'current_comment': comment_count + 1
                         })
 
-                        self.log_message(f"Cycle {cycle_count} - Comment #{comment_count + 1}: '{comment}' to post {post_id}")
+                        self.log_message(f"Cycle {cycle_count} - Comment #{comment_count + 1}: '{comment}' to post {post_id} using {current_token['name']}")
 
                         success, error_type = self.post_comment(post_id, comment, current_token, mention_id, mention_name, page_id)
                         
                         if success:
                             comment_count += 1
+                            token_status[current_token_idx]['total_comments'] += 1
+                            token_status[current_token_idx]['consecutive_failures'] = 0  # Reset failure count
+                            token_status[current_token_idx]['status'] = 'active'
                             active_tasks[task_id]['comments_posted'] = comment_count
+                            
+                            # Move to next token in round-robin
+                            token_index += 1
+                            
                         else:
-                            # Handle different error types
-                            if error_type == "invalid_token":
-                                self.log_message(f"Removing invalid token: {current_token['name']}", 'warning')
-                                valid_tokens.remove(current_token)
-                                if not valid_tokens:
+                            # Handle token failure
+                            should_remove = handle_token_failure(current_token_idx, error_type)
+                            
+                            if should_remove:
+                                # Remove permanently failed tokens
+                                del token_status[current_token_idx]
+                                if not token_status:
                                     self.log_message("No valid tokens remaining. Stopping automation.", 'error')
                                     break
-                                continue
-                            elif error_type == "rate_limit":
-                                self.log_message("Rate limit hit. Waiting 5 minutes...", 'warning')
-                                for _ in range(300):  # 5 minutes
+                                # Don't increment token_index as we removed a token
+                            else:
+                                # Move to next token for temporary failures
+                                token_index += 1
+                            
+                            # For rate limits, wait a bit before continuing
+                            if error_type == "rate_limit":
+                                self.log_message("Rate limit detected. Waiting 2 minutes before continuing...", 'warning')
+                                for _ in range(120):
                                     if self.is_task_stopped(task_id):
                                         break
                                     time.sleep(1)
-                                continue
-                            elif error_type == "spam":
-                                self.log_message("Spam detected. Increasing delay...", 'warning')
-                                delay = min(delay + 60, 300)  # Increase delay up to 5 minutes
+
+                        # Check if any tokens are available
+                        active_tokens = [t for t in token_status.values() if t['status'] != 'disabled']
+                        if not active_tokens:
+                            self.log_message("No active tokens remaining. Stopping automation.", 'error')
+                            break
 
                         # Random delay between comments
                         sleep_time = random.randint(delay, delay + 30)
@@ -299,15 +417,22 @@ class CommentAutomation:
                                 break
                             time.sleep(1)
 
-                        token_index += 1
-
                 # Check if we should continue
-                if not valid_tokens:
-                    self.log_message("No valid tokens remaining. Stopping automation.", 'error')
+                active_tokens = [t for t in token_status.values() if t['status'] != 'disabled']
+                if not active_tokens:
+                    self.log_message("No active tokens remaining. Stopping automation.", 'error')
                     break
                     
                 if not self.is_task_stopped(task_id):
-                    self.log_message(f"Cycle {cycle_count} completed. Starting next cycle in 60 seconds...")
+                    # Log token status summary
+                    status_summary = {}
+                    for token_info in token_status.values():
+                        status = token_info['status']
+                        status_summary[status] = status_summary.get(status, 0) + 1
+                    
+                    self.log_message(f"Cycle {cycle_count} completed. Token status: {status_summary}")
+                    self.log_message(f"Starting next cycle in 60 seconds...")
+                    
                     for _ in range(60):
                         if self.is_task_stopped(task_id):
                             break
@@ -322,9 +447,22 @@ class CommentAutomation:
             if task_id in active_tasks:
                 active_tasks[task_id]['status'] = 'completed'
                 active_tasks[task_id]['end_time'] = datetime.now().isoformat()
+            
+            # Log final token statistics
+            final_stats = {}
+            for token_info in token_status.values():
+                final_stats[token_info['token']['name']] = {
+                    'total_comments': token_info['total_comments'],
+                    'final_status': token_info['status']
+                }
+            
             self.log_message(f"Automation with Task ID {task_id} completed/stopped. Total comments posted: {comment_count}")
+            self.log_message(f"Final token statistics: {final_stats}")
 
+# Initialize automation instance
 automation = CommentAutomation()
+
+# ===== FLASK ROUTES =====
 
 @app.route('/')
 def index():
@@ -362,8 +500,8 @@ def start_automation():
         delay = max(60, int(data.get('delay', 60)))
         mention_id = data.get('mention_id', '').strip() or None
         mention_name = data.get('mention_name', '').strip() or None
-        page_id = data.get('page_id', '').strip() or None  # NEW: Page ID parameter
-        token_type = data.get('token_type', 'auto')  # NEW: Token type parameter
+        page_id = data.get('page_id', '').strip() or None  # Page ID parameter
+        token_type = data.get('token_type', 'auto')  # Token type parameter
 
         if not tokens or not comments or not post_ids:
             return jsonify({'success': False, 'error': 'Missing required data'})
@@ -402,7 +540,7 @@ def start_automation():
 
 @app.route('/validate_tokens', methods=['POST'])
 def validate_tokens():
-    """NEW: Endpoint to validate tokens before starting automation"""
+    """Endpoint to validate tokens before starting automation"""
     try:
         data = request.json
         tokens = data.get('tokens', [])
@@ -464,6 +602,18 @@ def get_task_info(task_id):
         return jsonify({'error': 'Task not found'}), 404
     return jsonify({'task': active_tasks[task_id]})
 
+@app.route('/token_status/<task_id>')
+def get_token_status(task_id):
+    """Get current token status for a running task"""
+    if task_id not in active_tasks:
+        return jsonify({'error': 'Task not found'}), 404
+    
+    return jsonify({
+        'task_id': task_id,
+        'status': 'Token status tracking implemented in run_automation method',
+        'note': 'Check logs for detailed token status information'
+    })
+
 @app.route('/clear_completed_tasks', methods=['POST'])
 def clear_completed_tasks():
     global active_tasks
@@ -481,6 +631,8 @@ def download_logs():
 @app.route('/health')
 def health_check():
     return jsonify({'status': 'healthy', 'timestamp': datetime.now().isoformat()})
+
+# ===== APPLICATION STARTUP =====
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
