@@ -1,471 +1,160 @@
-from flask import Flask, render_template, request, jsonify, send_file
+from flask import Flask, render_template, request, jsonify
 import requests
 import os
 import time
 import random
 import threading
-import json
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime
 from requests.exceptions import RequestException
 from werkzeug.utils import secure_filename
 import logging
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your-secret-key-change-this')
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 
 # Ensure upload directory exists
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-os.makedirs('logs', exist_ok=True)
+
+# Global dictionary to store running tasks
+running_tasks = {}
+task_stats = {}
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Random User-Agent List for better request handling
-USER_AGENTS = [
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-    'Mozilla/5.0 (Windows NT 6.1; WOW64; rv:61.0) Gecko/20100101 Firefox/61.0',
-    'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:64.0) Gecko/20100101 Firefox/64.0'
-]
-
-# Global variables to track automation status with task management
-automation_status = {
-    'running': False,
-    'current_comment': 0,
-    'total_comments': 0,
-    'current_token': '',
-    'current_post': '',
-    'task_id': None,
-    'start_time': None,
-    'logs': []
-}
-
-# Dictionary to store active tasks
-active_tasks = {}
-
-class CommentAutomation:
-    def __init__(self):
-        self.active_task_id = None
-        
-    def log_message(self, message, level='info', task_id=None):
-        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        log_entry = {
-            'timestamp': timestamp,
-            'message': message,
-            'level': level,
-            'task_id': task_id or self.active_task_id
+class TaskRunner:
+    def __init__(self, task_id, tokens, comments, post_id, delay_config, mention_config=None):
+        self.task_id = task_id
+        self.tokens = tokens
+        self.comments = comments
+        self.post_id = post_id
+        self.delay_config = delay_config
+        self.mention_config = mention_config
+        self.is_running = True
+        self.stats = {
+            'started_at': datetime.now(),
+            'comments_sent': 0,
+            'errors': 0,
+            'current_token': None,
+            'current_comment': None
         }
-        automation_status['logs'].append(log_entry)
-
-        if len(automation_status['logs']) > 200:
-            automation_status['logs'] = automation_status['logs'][-200:]
-
-        with open('logs/app.log', 'a', encoding='utf-8') as f:
-            f.write(f"{timestamp} - {level.upper()} - Task:{task_id or self.active_task_id}: {message}\n")
-
-    def generate_task_id(self):
-        return str(uuid.uuid4())[:8]
-
-    def validate_token(self, token, page_id=None, token_type='auto'):
-        """
-        Validate token - supports both user and page tokens
-        token_type: 'user', 'page', or 'auto' (auto-detect)
-        """
+        
+    def validate_token(self, token):
+        """Validate token and return user/page info if valid."""
         try:
-            headers = {'User-Agent': random.choice(USER_AGENTS)}
+            response = requests.get(f'https://graph.facebook.com/me?access_token={token}', timeout=10)
+            data = response.json()
             
-            # Handle None values properly
-            if token_type == 'page' or (token_type == 'auto' and page_id):
-                # Try page token validation first
-                if page_id and str(page_id).strip():  # Check if page_id exists and not empty
-                    response = requests.get(
-                        f'https://graph.facebook.com/v18.0/{str(page_id).strip()}',
-                        params={'access_token': token},
-                        headers=headers,
-                        timeout=10
-                    )
-                else:
-                    # Try to get page info from token
-                    response = requests.get(
-                        f'https://graph.facebook.com/v18.0/me',
-                        params={'access_token': token},
-                        headers=headers,
-                        timeout=10
-                    )
-                    
-                if response.status_code == 200:
-                    data = response.json()
-                    return True, data.get("name", "Page Token"), 'page'
-                else:
-                    error_data = response.json() if response else {}
-                    error_msg = error_data.get("error", {}).get("message", "Invalid token")
-                    return False, error_msg, None
-            else:
-                # User token validation
-                response = requests.get(
-                    f'https://graph.facebook.com/v18.0/me',
-                    params={'access_token': token},
-                    headers=headers,
-                    timeout=10
-                )
-                
-                if response.status_code == 200:
-                    data = response.json()
-                    return True, data.get("name", "User Token"), 'user'
-                else:
-                    error_data = response.json() if response else {}
-                    error_msg = error_data.get("error", {}).get("message", "Invalid token")
-                    return False, error_msg, None
-                    
-        except RequestException as e:
-            self.log_message(f"Error validating token: {e}", 'error')
-            return False, str(e), None
-
-    def check_token_permissions(self, token):
-        """Check what permissions a token has"""
+            if response.status_code == 200 and "name" in data:
+                token_type = "page" if "category" in data else "profile"
+                return token_type, data.get("name"), data.get("id")
+            return None, None, None
+        except Exception as e:
+            logger.error(f"Token validation error: {e}")
+            return None, None, None
+    
+    def get_delay(self):
+        """Calculate delay based on delay configuration."""
+        if self.delay_config['mode'] == 'random':
+            return random.randint(self.delay_config['min'], self.delay_config['max'])
+        else:  # accurate mode
+            return random.choice(self.delay_config['values'])
+    
+    def post_comment(self, token_info, comment):
+        """Post a comment using Facebook Graph API."""
+        token_type, token_name, token_id, token = token_info
+        
+        # Format comment with mention if enabled
+        formatted_comment = comment
+        if self.mention_config and self.mention_config['enabled']:
+            formatted_comment = f"@[{self.mention_config['id']}:{self.mention_config['name']}] {comment}"
+        
         try:
-            headers = {'User-Agent': random.choice(USER_AGENTS)}
-            response = requests.get(
-                "https://graph.facebook.com/v18.0/me/permissions",
-                params={"access_token": token},
-                headers=headers,
-                timeout=10
+            response = requests.post(
+                f'https://graph.facebook.com/{self.post_id}/comments/',
+                data={'message': formatted_comment, 'access_token': token},
+                timeout=15
             )
+            data = response.json()
             
-            if response.status_code == 200:
-                permissions = response.json().get("data", [])
-                granted_permissions = [p["permission"] for p in permissions if p["status"] == "granted"]
-                return granted_permissions
+            if 'id' in data:
+                logger.info(f"Comment posted successfully by {token_name}")
+                return True, "Success"
             else:
-                return []
+                error_msg = data.get("error", {}).get("message", "Unknown error")
+                logger.error(f"Failed to post comment: {error_msg}")
+                return False, error_msg
+                
         except Exception as e:
-            self.log_message(f"Error checking permissions: {e}", 'error')
-            return []
-
-    def get_valid_tokens(self, tokens, page_id=None, token_type='auto'):
+            logger.error(f"Request error: {e}")
+            return False, str(e)
+    
+    def run(self):
+        """Main task execution loop."""
+        # Validate all tokens first
         valid_tokens = []
-        for i, token in enumerate(tokens, 1):
-            token = token.strip()
-            is_valid, name_or_error, detected_type = self.validate_token(token, page_id, token_type)
-            if is_valid:
-                # Check permissions for page tokens
-                permissions = []
-                if detected_type == 'page':
-                    permissions = self.check_token_permissions(token)
-                    required_perms = ['pages_manage_posts', 'pages_read_engagement']
-                    missing_perms = [p for p in required_perms if p not in permissions]
-                    if missing_perms:
-                        self.log_message(f"Token #{i} missing permissions: {missing_perms}", 'warning')
-                
-                valid_tokens.append({
-                    'index': i, 
-                    'token': token, 
-                    'name': name_or_error,
-                    'type': detected_type,
-                    'permissions': permissions
-                })
-                self.log_message(f"Valid {detected_type} token found: {name_or_error}")
-            else:
-                self.log_message(f"Invalid token #{i}: {name_or_error}", 'warning')
-        return valid_tokens
-
-    def post_comment(self, post_id, comment, token_info, mention_id=None, mention_name=None, page_id=None):
-        try:
-            formatted_comment = f"@[{mention_id}:{mention_name}] {comment}" if mention_id and mention_name else comment
-            
-            headers = {'User-Agent': random.choice(USER_AGENTS)}
-            
-            # Use API version for better compatibility
-            url = f'https://graph.facebook.com/v18.0/{post_id}/comments/'
-            
-            data = {
-                'message': formatted_comment, 
-                'access_token': token_info['token']
-            }
-            
-            # If it's a page token and we have a page_id, specify the page
-            if token_info.get('type') == 'page' and page_id:
-                data['from'] = page_id
-            
-            response = requests.post(url, data=data, headers=headers, timeout=15)
-            response_data = response.json()
-            
-            if response.status_code == 200 and 'id' in response_data:
-                self.log_message(f"Comment posted successfully by {token_info['name']} ({token_info.get('type', 'unknown')} token)")
-                return True, None
-            else:
-                error_info = response_data.get("error", {})
-                error_msg = error_info.get("message", "Unknown error")
-                error_code = error_info.get("code", "")
-                
-                full_error = f"{error_msg} (Code: {error_code})" if error_code else error_msg
-                self.log_message(f"Failed to post comment: {full_error}", 'error')
-                
-                # Return error type for better handling
-                if any(keyword in error_msg.lower() for keyword in ["expired", "invalid", "session"]):
-                    return False, "invalid_token"
-                elif "rate limit" in error_msg.lower():
-                    return False, "rate_limit"
-                elif "permissions" in error_msg.lower():
-                    return False, "permissions"
-                elif "spam" in error_msg.lower():
-                    return False, "spam"
-                else:
-                    return False, "other"
-                    
-        except RequestException as e:
-            self.log_message(f"Request error: {e}", 'error')
-            return False, "network_error"
-
-    def is_task_stopped(self, task_id):
-        return task_id not in active_tasks or active_tasks[task_id].get('stop_flag', False)
-
-    def run_automation(self, task_id, tokens, comments, post_ids, delay, mention_id=None, mention_name=None, page_id=None, token_type='auto'):
-        self.active_task_id = task_id
-        automation_status.update({
-            'running': True,
-            'task_id': task_id,
-            'start_time': datetime.now().isoformat(),
-            'current_comment': 0
-        })
-
-        self.log_message(f"Starting infinite comment automation with Task ID: {task_id}")
-
-        valid_tokens = self.get_valid_tokens(tokens, page_id, token_type)
+        for token in self.tokens:
+            token_type, token_name, token_id = self.validate_token(token)
+            if token_name:
+                valid_tokens.append((token_type, token_name, token_id, token))
+        
         if not valid_tokens:
-            self.log_message("No valid tokens found", 'error')
-            automation_status['running'] = False
-            active_tasks.pop(task_id, None)
+            logger.error(f"No valid tokens found for task {self.task_id}")
             return
-
-        # Initialize token tracking for round-robin and temporary failures
-        token_status = {}
-        for token in valid_tokens:
-            token_status[token['index']] = {
-                'token': token,
-                'status': 'active',
-                'consecutive_failures': 0,
-                'last_failure_time': None,
-                'cooldown_until': None,
-                'total_comments': 0
-            }
-
-        comment_count = 0
+        
+        logger.info(f"Task {self.task_id} started with {len(valid_tokens)} valid tokens")
+        
+        comment_index = 0
         token_index = 0
-        cycle_count = 0
-
-        def get_next_available_token():
-            """Get next available token using round-robin, skipping temporarily unavailable ones"""
-            nonlocal token_index
-            attempts = 0
-            current_time = datetime.now()
-            
-            while attempts < len(token_status):
-                current_idx = list(token_status.keys())[token_index % len(token_status)]
-                token_info = token_status[current_idx]
+        
+        while self.is_running:
+            try:
+                # Get current comment and token
+                comment = self.comments[comment_index % len(self.comments)]
+                token_info = valid_tokens[token_index % len(valid_tokens)]
                 
-                # Check if token is in cooldown
-                if token_info['cooldown_until'] and current_time < token_info['cooldown_until']:
-                    remaining_cooldown = (token_info['cooldown_until'] - current_time).seconds
-                    self.log_message(f"Token {token_info['token']['name']} in cooldown for {remaining_cooldown}s, skipping...")
-                    token_index += 1
-                    attempts += 1
-                    continue
+                # Update current status
+                self.stats['current_token'] = f"{token_info[1]} ({token_info[0]})"
+                self.stats['current_comment'] = comment[:50] + "..." if len(comment) > 50 else comment
                 
-                # Check if token is permanently disabled
-                if token_info['status'] == 'disabled':
-                    self.log_message(f"Token {token_info['token']['name']} is disabled, skipping...")
-                    token_index += 1
-                    attempts += 1
-                    continue
+                # Post comment
+                success, message = self.post_comment(token_info, comment)
                 
-                # Reset cooldown if expired
-                if token_info['cooldown_until'] and current_time >= token_info['cooldown_until']:
-                    token_info['cooldown_until'] = None
-                    token_info['consecutive_failures'] = 0
-                    token_info['status'] = 'active'
-                    self.log_message(f"Token {token_info['token']['name']} cooldown expired, reactivating...")
+                if success:
+                    self.stats['comments_sent'] += 1
+                else:
+                    self.stats['errors'] += 1
                 
-                return current_idx, token_info['token']
-            
-            return None, None
-
-        def handle_token_failure(token_idx, error_type):
-            """Handle token failure and set appropriate cooldown"""
-            token_info = token_status[token_idx]
-            token_info['consecutive_failures'] += 1
-            token_info['last_failure_time'] = datetime.now()
-            
-            if error_type == "invalid_token":
-                # Permanently disable invalid tokens
-                token_info['status'] = 'disabled'
-                self.log_message(f"Token {token_info['token']['name']} marked as disabled (invalid)", 'warning')
-                return True  # Token should be removed from rotation
+                # Move to next token and comment
+                token_index = (token_index + 1) % len(valid_tokens)
+                comment_index += 1
                 
-            elif error_type == "rate_limit":
-                # Set cooldown for rate limited tokens
-                cooldown_minutes = min(token_info['consecutive_failures'] * 10, 60)  # Max 1 hour
-                token_info['cooldown_until'] = datetime.now() + timedelta(minutes=cooldown_minutes)
-                token_info['status'] = 'rate_limited'
-                self.log_message(f"Token {token_info['token']['name']} rate limited, cooldown: {cooldown_minutes}min", 'warning')
-                return False
+                # Wait for delay
+                if self.is_running:
+                    delay = self.get_delay()
+                    time.sleep(delay)
                 
-            elif error_type == "spam":
-                # Set longer cooldown for spam detection
-                cooldown_minutes = min(token_info['consecutive_failures'] * 20, 120)  # Max 2 hours
-                token_info['cooldown_until'] = datetime.now() + timedelta(minutes=cooldown_minutes)
-                token_info['status'] = 'spam_detected'
-                self.log_message(f"Token {token_info['token']['name']} spam detected, cooldown: {cooldown_minutes}min", 'warning')
-                return False
-                
-            elif error_type == "permissions":
-                # Temporarily disable for permission errors
-                cooldown_minutes = 30
-                token_info['cooldown_until'] = datetime.now() + timedelta(minutes=cooldown_minutes)
-                token_info['status'] = 'permission_error'
-                self.log_message(f"Token {token_info['token']['name']} permission error, cooldown: {cooldown_minutes}min", 'warning')
-                return False
-            
-            else:
-                # General error - short cooldown
-                cooldown_minutes = min(token_info['consecutive_failures'] * 5, 30)  # Max 30 min
-                token_info['cooldown_until'] = datetime.now() + timedelta(minutes=cooldown_minutes)
-                token_info['status'] = 'temporary_error'
-                self.log_message(f"Token {token_info['token']['name']} temporary error, cooldown: {cooldown_minutes}min", 'warning')
-                return False
+            except Exception as e:
+                logger.error(f"Error in task {self.task_id}: {e}")
+                self.stats['errors'] += 1
+                time.sleep(5)  # Short delay before continuing
+    
+    def stop(self):
+        """Stop the task."""
+        self.is_running = False
+        logger.info(f"Task {self.task_id} stopped")
 
-        try:
-            while task_id in active_tasks and not self.is_task_stopped(task_id):
-                cycle_count += 1
-                self.log_message(f"Starting cycle #{cycle_count}")
-
-                for comment in comments:
-                    if self.is_task_stopped(task_id):
-                        break
-
-                    for post_id in post_ids:
-                        if self.is_task_stopped(task_id):
-                            break
-
-                        # Get next available token
-                        current_token_idx, current_token = get_next_available_token()
-                        
-                        if current_token is None:
-                            self.log_message("No available tokens at the moment. Waiting 60 seconds...", 'warning')
-                            for _ in range(60):
-                                if self.is_task_stopped(task_id):
-                                    break
-                                time.sleep(1)
-                            continue
-
-                        automation_status.update({
-                            'current_token': current_token['name'],
-                            'current_post': post_id,
-                            'current_comment': comment_count + 1
-                        })
-
-                        self.log_message(f"Cycle {cycle_count} - Comment #{comment_count + 1}: '{comment}' to post {post_id} using {current_token['name']}")
-
-                        success, error_type = self.post_comment(post_id, comment, current_token, mention_id, mention_name, page_id)
-                        
-                        if success:
-                            comment_count += 1
-                            token_status[current_token_idx]['total_comments'] += 1
-                            token_status[current_token_idx]['consecutive_failures'] = 0  # Reset failure count
-                            token_status[current_token_idx]['status'] = 'active'
-                            active_tasks[task_id]['comments_posted'] = comment_count
-                            
-                            # Move to next token in round-robin
-                            token_index += 1
-                            
-                        else:
-                            # Handle token failure
-                            should_remove = handle_token_failure(current_token_idx, error_type)
-                            
-                            if should_remove:
-                                # Remove permanently failed tokens
-                                del token_status[current_token_idx]
-                                if not token_status:
-                                    self.log_message("No valid tokens remaining. Stopping automation.", 'error')
-                                    break
-                                # Don't increment token_index as we removed a token
-                            else:
-                                # Move to next token for temporary failures
-                                token_index += 1
-                            
-                            # For rate limits, wait a bit before continuing
-                            if error_type == "rate_limit":
-                                self.log_message("Rate limit detected. Waiting 2 minutes before continuing...", 'warning')
-                                for _ in range(120):
-                                    if self.is_task_stopped(task_id):
-                                        break
-                                    time.sleep(1)
-
-                        # Check if any tokens are available
-                        active_tokens = [t for t in token_status.values() if t['status'] != 'disabled']
-                        if not active_tokens:
-                            self.log_message("No active tokens remaining. Stopping automation.", 'error')
-                            break
-
-                        # Random delay between comments
-                        sleep_time = random.randint(delay, delay + 30)
-                        self.log_message(f"Waiting {sleep_time} seconds before next comment...")
-
-                        for _ in range(sleep_time):
-                            if self.is_task_stopped(task_id):
-                                break
-                            time.sleep(1)
-
-                # Check if we should continue
-                active_tokens = [t for t in token_status.values() if t['status'] != 'disabled']
-                if not active_tokens:
-                    self.log_message("No active tokens remaining. Stopping automation.", 'error')
-                    break
-                    
-                if not self.is_task_stopped(task_id):
-                    # Log token status summary
-                    status_summary = {}
-                    for token_info in token_status.values():
-                        status = token_info['status']
-                        status_summary[status] = status_summary.get(status, 0) + 1
-                    
-                    self.log_message(f"Cycle {cycle_count} completed. Token status: {status_summary}")
-                    self.log_message(f"Starting next cycle in 60 seconds...")
-                    
-                    for _ in range(60):
-                        if self.is_task_stopped(task_id):
-                            break
-                        time.sleep(1)
-
-        except Exception as e:
-            self.log_message(f"Automation error: {e}", 'error')
-
-        finally:
-            automation_status['running'] = False
-            automation_status['task_id'] = None
-            if task_id in active_tasks:
-                active_tasks[task_id]['status'] = 'completed'
-                active_tasks[task_id]['end_time'] = datetime.now().isoformat()
-            
-            # Log final token statistics
-            final_stats = {}
-            for token_info in token_status.values():
-                final_stats[token_info['token']['name']] = {
-                    'total_comments': token_info['total_comments'],
-                    'final_status': token_info['status']
-                }
-            
-            self.log_message(f"Automation with Task ID {task_id} completed/stopped. Total comments posted: {comment_count}")
-            self.log_message(f"Final token statistics: {final_stats}")
-
-# Initialize automation instance
-automation = CommentAutomation()
-
-# ===== FLASK ROUTES =====
+def read_file_lines(filepath):
+    """Read lines from a file."""
+    try:
+        with open(filepath, 'r', encoding='utf-8') as file:
+            return [line.strip() for line in file.readlines() if line.strip()]
+    except Exception as e:
+        logger.error(f"Error reading file {filepath}: {e}")
+        return []
 
 @app.route('/')
 def index():
@@ -473,173 +162,140 @@ def index():
 
 @app.route('/upload', methods=['POST'])
 def upload_files():
+    """Handle file uploads."""
     try:
         uploaded_files = {}
+        
         for file_type in ['tokens', 'comments']:
             if file_type in request.files:
                 file = request.files[file_type]
                 if file and file.filename:
-                    filename = secure_filename(file.filename)
-                    file_path = os.path.join(app.config['UPLOAD_FOLDER'], f"{file_type}_{filename}")
-                    file.save(file_path)
-                    with open(file_path, 'r', encoding='utf-8') as f:
-                        content = [line.strip() for line in f.readlines() if line.strip()]
-                    uploaded_files[file_type] = content
-                    os.remove(file_path)
-        return jsonify({'success': True, 'files': uploaded_files})
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)})
-
-@app.route('/start_automation', methods=['POST'])
-def start_automation():
-    try:
-        if automation_status['running']:
-            return jsonify({'success': False, 'error': 'Automation is already running'})
-
-        data = request.json
-        tokens = data.get('tokens', [])
-        comments = data.get('comments', [])
-        post_ids = [pid.strip() for pid in data.get('post_ids', '').split(',') if pid.strip()]
-        delay = max(60, int(data.get('delay', 60)))
-        mention_id = data.get('mention_id', '').strip() if data.get('mention_id') else None
-        mention_name = data.get('mention_name', '').strip() if data.get('mention_name') else None
-        page_id = data.get('page_id', '').strip() if data.get('page_id') else None  # Page ID parameter
-        token_type = data.get('token_type', 'auto')  # Token type parameter
-
-        if not tokens or not comments or not post_ids:
-            return jsonify({'success': False, 'error': 'Missing required data'})
-
-        task_id = automation.generate_task_id()
-        active_tasks[task_id] = {
-            'id': task_id,
-            'status': 'running',
-            'start_time': datetime.now().isoformat(),
-            'tokens_count': len(tokens),
-            'comments_count': len(comments),
-            'post_ids_count': len(post_ids),
-            'comments_posted': 0,
-            'stop_flag': False,
-            'page_id': page_id,
-            'token_type': token_type
-        }
-
-        automation_status['logs'] = []
-
-        thread = threading.Thread(
-            target=automation.run_automation,
-            args=(task_id, tokens, comments, post_ids, delay, mention_id, mention_name, page_id, token_type)
-        )
-        thread.daemon = True
-        thread.start()
-
-        return jsonify({
-            'success': True,
-            'message': 'Automation started',
-            'task_id': task_id,
-            'note': 'This automation will run infinitely until stopped using the task ID'
-        })
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)})
-
-@app.route('/validate_tokens', methods=['POST'])
-def validate_tokens():
-    """Endpoint to validate tokens before starting automation"""
-    try:
-        data = request.json
-        tokens = data.get('tokens', [])
-        page_id = data.get('page_id', '')
-        token_type = data.get('token_type', 'auto')
+                    filename = secure_filename(f"{uuid.uuid4()}_{file.filename}")
+                    filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+                    file.save(filepath)
+                    uploaded_files[file_type] = filepath
         
-        # Properly handle None and empty strings
-        page_id = page_id.strip() if page_id and page_id is not None else None
+        return jsonify({'success': True, 'files': uploaded_files})
+    
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/start_task', methods=['POST'])
+def start_task():
+    """Start a new comment automation task."""
+    try:
+        data = request.json
+        
+        # Generate unique task ID
+        task_id = str(uuid.uuid4())[:8]
+        
+        # Read tokens and comments from uploaded files
+        tokens = read_file_lines(data['token_file'])
+        comments = read_file_lines(data['comment_file'])
         
         if not tokens:
-            return jsonify({'success': False, 'error': 'No tokens provided'})
+            return jsonify({'success': False, 'error': 'No tokens found in file'})
         
-        valid_tokens = automation.get_valid_tokens(tokens, page_id, token_type)
+        if not comments:
+            return jsonify({'success': False, 'error': 'No comments found in file'})
+        
+        # Parse delay configuration
+        delay_config = data['delay_config']
+        if delay_config['mode'] == 'accurate':
+            try:
+                delay_config['values'] = [int(x.strip()) for x in delay_config['values'].split(',')]
+            except ValueError:
+                return jsonify({'success': False, 'error': 'Invalid delay values format'})
+        
+        # Parse mention configuration
+        mention_config = None
+        if data.get('mention_enabled'):
+            mention_config = {
+                'enabled': True,
+                'id': data['mention_id'],
+                'name': data['mention_name']
+            }
+        
+        # Create and start task
+        task = TaskRunner(
+            task_id=task_id,
+            tokens=tokens,
+            comments=comments,
+            post_id=data['post_id'],
+            delay_config=delay_config,
+            mention_config=mention_config
+        )
+        
+        # Start task in background thread
+        thread = threading.Thread(target=task.run, daemon=True)
+        thread.start()
+        
+        # Store task reference
+        running_tasks[task_id] = task
+        task_stats[task_id] = task.stats
+        
+        logger.info(f"Started task {task_id}")
         
         return jsonify({
-            'success': True,
-            'total_tokens': len(tokens),
-            'valid_tokens': len(valid_tokens),
-            'tokens_info': [
-                {
-                    'index': token['index'],
-                    'name': token['name'],
-                    'type': token.get('type', 'unknown'),
-                    'permissions': token.get('permissions', [])
-                }
-                for token in valid_tokens
-            ]
+            'success': True, 
+            'task_id': task_id,
+            'message': f'Task started with ID: {task_id}'
         })
+        
     except Exception as e:
+        logger.error(f"Error starting task: {e}")
         return jsonify({'success': False, 'error': str(e)})
 
-@app.route('/stop_automation', methods=['POST'])
-def stop_automation():
+@app.route('/stop_task', methods=['POST'])
+def stop_task():
+    """Stop a running task."""
     try:
         data = request.json
         task_id = data.get('task_id')
-        if not task_id:
-            return jsonify({'success': False, 'error': 'Task ID is required'})
-        if task_id not in active_tasks:
-            return jsonify({'success': False, 'error': 'Invalid or expired task ID'})
-
-        active_tasks[task_id]['stop_flag'] = True
-        active_tasks[task_id]['status'] = 'stopping'
-        automation.log_message(f"Stop signal sent for Task ID: {task_id}", 'info', task_id)
-        return jsonify({'success': True, 'message': f'Stop signal sent for task {task_id}'})
+        
+        if task_id not in running_tasks:
+            return jsonify({'success': False, 'error': 'Task not found or already stopped'})
+        
+        # Stop the task
+        running_tasks[task_id].stop()
+        del running_tasks[task_id]
+        
+        logger.info(f"Stopped task {task_id}")
+        
+        return jsonify({'success': True, 'message': f'Task {task_id} stopped successfully'})
+        
     except Exception as e:
+        logger.error(f"Error stopping task: {e}")
         return jsonify({'success': False, 'error': str(e)})
 
-@app.route('/status')
-def get_status():
-    status_with_tasks = automation_status.copy()
-    status_with_tasks['active_tasks'] = active_tasks
-    return jsonify(status_with_tasks)
-
-@app.route('/tasks')
-def get_tasks():
-    return jsonify({'tasks': active_tasks})
-
-@app.route('/task/<task_id>')
-def get_task_info(task_id):
-    if task_id not in active_tasks:
-        return jsonify({'error': 'Task not found'}), 404
-    return jsonify({'task': active_tasks[task_id]})
-
-@app.route('/token_status/<task_id>')
-def get_token_status(task_id):
-    """Get current token status for a running task"""
-    if task_id not in active_tasks:
-        return jsonify({'error': 'Task not found'}), 404
-    
-    return jsonify({
-        'task_id': task_id,
-        'status': 'Token status tracking implemented in run_automation method',
-        'note': 'Check logs for detailed token status information'
-    })
-
-@app.route('/clear_completed_tasks', methods=['POST'])
-def clear_completed_tasks():
-    global active_tasks
-    active_tasks = {k: v for k, v in active_tasks.items() if v['status'] == 'running'}
-    return jsonify({'success': True, 'message': 'Completed tasks cleared'})
-
-@app.route('/download_logs')
-def download_logs():
-    log_file = 'logs/app.log'
-    if os.path.exists(log_file):
-        return send_file(log_file, as_attachment=True, download_name='automation_logs.txt')
+@app.route('/task_status/<task_id>')
+def get_task_status(task_id):
+    """Get status of a specific task."""
+    if task_id in running_tasks:
+        stats = running_tasks[task_id].stats
+        stats['status'] = 'running'
+        return jsonify({'success': True, 'stats': stats})
+    elif task_id in task_stats:
+        stats = task_stats[task_id]
+        stats['status'] = 'stopped'
+        return jsonify({'success': True, 'stats': stats})
     else:
-        return jsonify({'error': 'No log file found'}), 404
+        return jsonify({'success': False, 'error': 'Task not found'})
 
-@app.route('/health')
-def health_check():
-    return jsonify({'status': 'healthy', 'timestamp': datetime.now().isoformat()})
+@app.route('/running_tasks')
+def get_running_tasks():
+    """Get list of all running tasks."""
+    tasks = []
+    for task_id, task in running_tasks.items():
+        tasks.append({
+            'task_id': task_id,
+            'stats': task.stats
+        })
+    return jsonify({'success': True, 'tasks': tasks})
 
-# ===== APPLICATION STARTUP =====
+@app.errorhandler(413)
+def too_large(e):
+    return jsonify({'success': False, 'error': 'File too large. Maximum size is 16MB.'}), 413
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port, debug=False)
+    app.run(debug=True, threaded=True)
